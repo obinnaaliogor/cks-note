@@ -1,4 +1,4 @@
-Understanding the Kubernetes Attack Surface
+1. Understanding the Kubernetes Attack Surface
 The 4C’s of Cloud Native security:
 Cloud Security: The cloud is the first line of defense, enabling access to pods on your cluster from anywhere should be prohibited.
 datacenter, network and servers. Impliment firewalls.
@@ -11,3 +11,27 @@ Container Security: Restrict Images, Supply Chain, Sandboxing and Priviledge run
 Code Security: This refers to the application code itself..
 Hardcoding database credentials or passing critical informations via environment variables or exposing applications without tls are bad coding practices.
 You must enable mtls for pod to pod communication.
+
+2. Cluster Setup and Hardening
+What are CIS Benchmarks: This stands for center for internet security, they provide a security best practices or benchmark for securing
+of infrastructures in the cloud or on premises.
+This best practices can be Implemented in our k8s cluster, vm and other devices and platform supported by cis.
+CIS provides tools and benchmark that can help run assessment, commands and remmediations.
+The CIS-CAT tool helps in the automated assessment of the server, it compares the current configuration of the server against the recommended best practices in the benchmark document
+and generate a report.
+
+Lets say for instance, someone in a datacenter can attach a usb drive to a server and infect the server with a malware.
+Following cis benchmark the usd port should be disabled to avoid these type of attack.
+Access: What users are logged in? Can an admin login as root? what if an admin logs in as root and perform a task that can impact the server?? you wouldnt kwn which user did that.
+It is security best practices that root user be to disabled and only allow admins to login using their own account and use sudo to elevate their permission level if required.
+
+Configuring sudo:
+A server must have sudo configured and only necessary users configured to have sudo Priviledges
+Network: Implement network best practices such as Configuring firewalls iptables rule allowing only required port from and specific addresses.
+Services: Enable only required services such as ntp other non required services on the server should be disabled.
+Filesystems: Ensure the right permissions are set on the files and unused Filesystems disabled.
+Configure auditing and logs to make sure changes are logged auditing purposes.
+A new vulnerability emerges now and then, we must make sure we update and patch our systems to prevent attacks.
+
+
+
