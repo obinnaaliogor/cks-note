@@ -1,0 +1,13 @@
+Understanding the Kubernetes Attack Surface
+The 4C’s of Cloud Native security:
+Cloud Security: The cloud is the first line of defense, enabling access to pods on your cluster from anywhere should be prohibited.
+datacenter, network and servers. Impliment firewalls.
+The cloud security refers to the entire infrastructure hosting the servers.
+
+Cluster Security: This includes Authentication, authorization, Admission and networkpolicy.
+Ensure the protection of the docker daemon, the k8s api and any gui used to manage the k8s cluster such as as the k8s dashboard.
+
+Container Security: Restrict Images, Supply Chain, Sandboxing and Priviledge running of containers.
+Code Security: This refers to the application code itself..
+Hardcoding database credentials or passing critical informations via environment variables or exposing applications without tls are bad coding practices.
+You must enable mtls for pod to pod communication.
