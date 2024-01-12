@@ -2100,6 +2100,8 @@ kubectl proxy --> by default listens on 8001
 kubectl proxy --port=8002 --> me setting a diff port for the kubectl proxy to listen
 access the service endpoint which is the pod
  curl http://localhost:8002/api/v1/namespaces/default/services/nginx/proxy/
+ Access from the GUI:
+ http://localhost:8002/api/v1/namespaces/default/services/nginx/proxy/
 
  Alternatively we use kubectl port-forward:
  Forwarding a port on your laptop to a port on the service within your kubernetes cluster.
@@ -2158,3 +2160,111 @@ kubectl proxy - Opens proxy port to API server
 kubectl port-forward - Opens port to target deployment pods
 
 
+
+Kubernetes Dashboard
+Reference: https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/
+
+Dashboard is a web-based Kubernetes user interface. You can use Dashboard to deploy containerized applications to a Kubernetes cluster,
+ troubleshoot your containerized application, and manage the cluster resources. You can use Dashboard to get an overview of applications running on your cluster,
+ as well as for creating or modifying individual Kubernetes resources (such as Deployments, Jobs, DaemonSets, etc). For example, you can scale a Deployment,
+ initiate a rolling update, restart a pod or deploy new applications using a deploy wizard.
+Dashboard also provides information on the state of Kubernetes resources in your cluster and on any errors that may have occurred.
+This is a GUI of your running cluster, based on the authorization granted to a user, group,serviceaccount it determines what resources he or she can create,get,list
+and watch using the dashboard.
+
+Restricting access to the kubernetes dashboard is very essential in securing the cluster.
+In the earlier release of the k8s access to the k8s dashboard was not restricted.
+One is the cryptojacking attack on tesla, where an attachker gained access to it cluster through the kubernetes dashboard and used it to mine crypto currency.
+https://www.cnbc.com/2018/02/21/hackers-hijack-teslas-cloud-system-to-mine-cryptocurrency-redlock.html
+
+Accessing the k8s dashboard:
+Deploy the k8s dashboard using the manifest from the kubernetes documentation.
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+When deployed a namespace is created and service of ClusterIP is also created..
+
+start the proxy service
+kubectl proxy
+access the dashboard
+curl -k http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/
+
+You will be promted to enter a token or kubeconfig as below msg indicates:
+Kubernetes Dashboard
+Every Service Account has a Secret with valid Bearer Token that can be used to log in to Dashboard. To find out more about how to configure and use
+Bearer Tokens, please refer to the Authentication section.
+Please select the kubeconfig file that you have created to configure access to the cluster. To find out more about how to
+ configure and use kubeconfig file, please refer to the Configure Access to Multiple Clusters section.
+Enter token *
+
+Securing Kubernetes Dashboard
+Authentication mechanism available for the kubernetes dashboard:
+Using token for the authentication, create a user/sa, grant the user authorization via rbac.
+ex: follow the guide in this kubernetes documentation
+Reference: https://github.com/kubernetes/dashboard/blob/master/docs/user/access-control/creating-sample-user.md
+
+
+Reference links
+
+Below are some references:
+
+https://redlock.io/blog/cryptojacking-tesla
+
+https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/
+
+https://github.com/kubernetes/dashboard
+
+https://www.youtube.com/watch?v=od8TnIvuADg
+
+https://blog.heptio.com/on-securing-the-kubernetes-dashboard-16b09b1b7aca
+
+https://github.com/kubernetes/dashboard/blob/master/docs/user/access-control/creating-sample-user.md
+
+
+LAB:
+Now run kubectl proxy with the command kubectl proxy --address=0.0.0.0 --disable-filter &
+
+Click on Kubernetes API tab which is available at top right on the terminal and you will see API endpoints.
+
+Append /api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/login to URL to check login UI
+
+Note: From a security perspective do not use --disable-filter option as it can leave you vulnerable to XSRF attacks, when used with an accessible port. We have used this option to make our lab environment work with the kubernetes dashboard so you can access it through a browser. Ideally you would be accessing it through a kubectl proxy on your localhost only.
+So in actual environments do not use --disable-filter option as its a major security risk.
+
+command to get token:
+kubectl get secrets -n kubernetes-dashboard admin-user -o go-template="{{.data.token | base64decode}}"
+
+Important:
+It is a security risk to use the admin-user sa and cluster-admin clusterrole that exists by default in the k8s cluster and a clusterrolebinding you created to access the k8s dashboard.
+The admin user can create and do anything unlimited..
+
+Note:
+As you can see the admin-user is way too powerful. Let's now create a new Service Account readonly-user in the kubernetes-dashboard namespace with
+view permissions to all resources in all namespaces.
+ClusterRole name : view
+ClusterRoleBinding name :readonly-user-binding
+k create clusterrolebinding readonly-user-binding --clusterrole=view --serviceaccount=kubernetes-dashboard:readonly-user
+Note by default the view clusterrole exist in k8s kubeadm setup
+
+Create a token or get the token from a secret for the sa and use this to access the k8s dashboard.
+k create token -n kubernetes-dashboard readonly-user
+This will create a token for you copy it and paste on the k8s dashboard GUI.
+
+Alternatively run
+kubectl -n kubernetes-dashboard get secret readonly-user -o go-template="{{.data.token | base64decode}}"
+get the token and input in the Token filed in the k8s dashboard GUI.
+
+IQ:
+The readonly-user service account has too few privileges. Now let's create a dashboard-admin service account with access to the kubernetes-dashboard namespace only.
+
+
+Also, create a new secret called dashboard-admin-secret in the same namespace using the given YAML file /root/dashboard-admin-secret.yaml. It will create token credentials for the service account.
+
+Use admin ClusterRole with RoleBinding so that it gives full control over every resource in the role binding's namespace, including the namespace itself.
+
+Also assign list-namespace ClusterRole to only see namespaces.
+
+Please use below names for bindings
+
+RoleBinding name: dashboard-admin-binding
+
+ClusterRoleBinding name: dashboard-admin-list-namespace-binding
+---
