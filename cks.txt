@@ -2149,3 +2149,12 @@ controlplane ~ ✦2 ➜  jobs
 [1]-  Running                 kubectl proxy --port=8002 &
 [2]+  Running                 kubectl port-forward pod/nginx-cbdccf466-gfrxw 8005:80 &
 
+
+
+Summary for this lab
+
+kubectl proxy - Opens proxy port to API server
+
+kubectl port-forward - Opens port to target deployment pods
+
+
