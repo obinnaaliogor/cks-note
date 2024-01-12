@@ -35,3 +35,2024 @@ A new vulnerability emerges now and then, we must make sure we update and patch 
 
 
 
+IQ:
+We have installed the CIS-CAT Pro Assessor tool called Assessor-CLI, under /root.
+
+Please run the assessment with the Assessor-CLI.sh script inside Assessor directory and generate a report called index.html in the output
+directory /var/www/html/.Once done, the report can be viewed using the Assessment Report tab located above the terminal.
+Run the test in interactive mode and use below settings:
+
+Benchmarks/Data-Stream Collections: : CIS Ubuntu Linux 20.04 LTS Benchmark v2.0.0
+
+Profile : Level 1 - Server
+
+CIS benchmark for Kubernetes:
+Download the CIS CAT Lite tool from the below link:
+
+https://learn.cisecurity.org/cis-cat-lite
+
+Validating CIS benchmark using Kube-bench tool:
+The Kube-bench tool is an open source tool from aqua security it runs automated assessment to access if Kubernetes was deployed using CIS best practices.
+
+Download kube-bench
+curl -L https://github.com/aquasecurity/kube-bench/releases/download/v0.7.0/kube-bench_0.7.0_linux_amd64.deb -o kube-bench_0.7.0_linux_amd64.deb
+
+Install kube-bench
+apt install ./kube-bench_0.7.0_linux_amd64.deb -f
+
+To validate, run kube-bench
+Reference: https://www.youtube.com/watch?v=jvmShTBSBoA&list=PLFkEchqXDZx6Bw3B2NRVc499j1TavjOvm
+
+
+
+Kubernetes Security Primitives
+Article on Setting up Basic Authentication:
+Setup basic authentication on Kubernetes (Deprecated in 1.19)
+
+    Note: This is not recommended in a production environment. This is only for learning purposes. Also note that this approach is deprecated in
+    Kubernetes version 1.19 and is no longer available in later releases
+
+Follow the below instructions to configure basic authentication in a kubeadm setup.
+
+Create a file with user details locally at /tmp/users/user-details.csv
+
+    # User File Contents
+    password123,user1,u0001
+    password123,user2,u0002
+    password123,user3,u0003
+    password123,user4,u0004
+    password123,user5,u0005
+
+Edit the kube-apiserver static pod configured by kubeadm to pass in the user details. The file is located at /etc/kubernetes/manifests/kube-apiserver.yaml
+
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: kube-apiserver
+      namespace: kube-system
+    spec:
+      containers:
+      - command:
+        - kube-apiserver
+          <content-hidden>
+        image: k8s.gcr.io/kube-apiserver-amd64:v1.11.3
+        name: kube-apiserver
+        volumeMounts:
+        - mountPath: /tmp/users
+          name: usr-details
+          readOnly: true
+      volumes:
+      - hostPath:
+          path: /tmp/users
+          type: DirectoryOrCreate
+        name: usr-details
+
+Modify the kube-apiserver startup options to include the basic-auth file
+
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      creationTimestamp: null
+      name: kube-apiserver
+      namespace: kube-system
+    spec:
+      containers:
+      - command:
+        - kube-apiserver
+        - --authorization-mode=Node,RBAC
+          <content-hidden>
+        - --basic-auth-file=/tmp/users/user-details.csv
+
+Create the necessary roles and role bindings for these users:
+
+    ---
+    kind: Role
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      namespace: default
+      name: pod-reader
+    rules:
+    - apiGroups: [""] # "" indicates the core API group
+      resources: ["pods"]
+      verbs: ["get", "watch", "list"]
+
+    ---
+    # This role binding allows "jane" to read pods in the "default" namespace.
+    kind: RoleBinding
+    apiVersion: rbac.authorization.k8s.io/v1
+    metadata:
+      name: read-pods
+      namespace: default
+    subjects:
+    - kind: User
+      name: user1 # Name is case sensitive
+      apiGroup: rbac.authorization.k8s.io
+    roleRef:
+      kind: Role #this must be Role or ClusterRole
+      name: pod-reader # this must match the name of the Role or ClusterRole you wish to bind to
+      apiGroup: rbac.authorization.k8s.io
+
+Once created, you may authenticate into the kube-api server using the users credentials
+
+curl -v -k https://localhost:6443/api/v1/pods -u "user1:password123"
+
+Security:
+						-----------------------
+
+						Kubernetes primitives..
+						Network Policies..
+						The Kube-apiserver being at the center of k8s. Every other component in the cluster talks to the apiserver.
+						Our goal would be start with it as our first line of defense, securing the kube-apiserver. How can we do this? This is defined by:
+
+						1. Who can access the k8s cluster (Authentication)
+						2. What can they do (Authorization)
+
+						Authentications:
+						The various authentication mechanism are:
+						1 Certificates 2. ServiceAcccounts 3. External Authentication providers -LDAP 3. Files- Username and Password 5. Files Username and Tokens...
+
+						Authorization:
+						The various Authorization mechanism are:
+						1. RBACK -- Role based access control
+						2. ABACK --
+						3. Node Authorization
+						4 Webhook mode
+
+						Communication between the various components in the kubernetes cluster is secured using TLS-CERTIFICATE.
+
+						Important: By default all pods can talk to any pods in the cluster..
+						How can we limit/restrict communication between pods in the cluster?, we use network policy to do this.
+
+
+
+						Authentications:
+
+						Article on Setting up Basic Authentication
+						Setup basic authentication on Kubernetes (Deprecated in 1.19)
+
+						    Note: This is not recommended in a production environment. This is only for learning purposes.
+							Also note that this approach is deprecated in Kubernetes version 1.19 and is no longer available in later releases
+
+						Follow the below instructions to configure basic authentication in a kubeadm setup.
+
+						Create a file with user details locally at /tmp/users/user-details.csv
+
+						    # User File Contents
+						    password123,user1,u0001
+						    password123,user2,u0002
+						    password123,user3,u0003
+						    password123,user4,u0004
+						    password123,user5,u0005
+
+						Edit the kube-apiserver static pod configured by kubeadm to pass in the user details. The file is located at /etc/kubernetes/manifests/kube-apiserver.yaml
+
+						    apiVersion: v1
+						    kind: Pod
+						    metadata:
+						      name: kube-apiserver
+						      namespace: kube-system
+						    spec:
+						      containers:
+						      - command:
+						        - kube-apiserver
+						          <content-hidden>
+						        image: k8s.gcr.io/kube-apiserver-amd64:v1.11.3
+						        name: kube-apiserver
+						        volumeMounts:
+						        - mountPath: /tmp/users
+						          name: usr-details
+						          readOnly: true
+						      volumes:
+						      - hostPath:
+						          path: /tmp/users
+						          type: DirectoryOrCreate
+						        name: usr-details
+
+						Modify the kube-apiserver startup options to include the basic-auth file
+
+						    apiVersion: v1
+						    kind: Pod
+						    metadata:
+						      creationTimestamp: null
+						      name: kube-apiserver
+						      namespace: kube-system
+						    spec:
+						      containers:
+						      - command:
+						        - kube-apiserver
+						        - --authorization-mode=Node,RBAC
+						          <content-hidden>
+						        - --basic-auth-file=/tmp/users/user-details.csv
+
+						Create the necessary roles and role bindings for these users:
+
+						    ---
+						    kind: Role
+						    apiVersion: rbac.authorization.k8s.io/v1
+						    metadata:
+						      namespace: default
+						      name: pod-reader
+						    rules:
+						    - apiGroups: [""] # "" indicates the core API group
+						      resources: ["pods"]
+						      verbs: ["get", "watch", "list"]
+
+						    ---
+						    # This role binding allows "jane" to read pods in the "default" namespace.
+						    kind: RoleBinding
+						    apiVersion: rbac.authorization.k8s.io/v1
+						    metadata:
+						      name: read-pods
+						      namespace: default
+						    subjects:
+						    - kind: User
+						      name: user1 # Name is case sensitive
+						      apiGroup: rbac.authorization.k8s.io
+						    roleRef:
+						      kind: Role #this must be Role or ClusterRole
+						      name: pod-reader # this must match the name of the Role or ClusterRole you wish to bind to
+						      apiGroup: rbac.authorization.k8s.io
+
+						Once created, you may authenticate into the kube-api server using the users credentials
+
+						curl -v -k https://localhost:6443/api/v1/pods -u "user1:password123"
+
+
+
+						TLS Introduction:
+						Goals:
+						What are TLS Certificates?
+						How does Kubernetes use Certificates?
+						How to generate them?
+						How to configure them?
+						How to view them?
+						How to troubleshoot issues related to certificates.
+
+						TLS-BASICS:
+						Encryption...
+						How can we secure our communications over the internet?
+						How can a client (a user or her browser) securly communicate with a web-server?
+
+						We have 2 ways of securing communication from the client to the server and vice versa..
+						1. By the use of Symmetric encryption and asymmetric Encryption.
+						Symmetric encryption uses one key to encrypt data and the same key to decrypt data.
+						Asymmetric encryption uses a pair of keys, a public key and a private key..
+						if it uses a private key to encrypt, it will use a public key to decrypt the data and also if it uses a public key to encrypt a data it will use a private key to decrypt the data.
+
+						Lets picture a senario where we have a hacker acting as a middle man in our communication. i.e, a communication bw a client and a server.
+						I the client sends a packet unencrypted over a http connection to a server, the hacker receives this data and the server receives that data also.
+						My data is compromised and im hacked...
+
+						I look for new measures to impliment security and secure communication to my server.. I then think of encryption and then, i encrypt the data being sent to the server using
+						symmetric encryption mechanism...
+						I send the encrypted data to the server, the hacker receives the data and the same goes for the server but b/c its encrypted with symmetric key
+						they both cant do anything with the data.
+
+						I will have to also send the symmetric key that i used to encrypt the data to the server for it to be able to decrypt and retrive/use the data.
+						If i do this the hacker will also get the key and decrypt the data.
+
+						How can i ensure the hacker do not have access to the key or even if he has access to the key he will not be able to use it????
+
+						We will acheive this using Asymmetric encryption.
+						We think of ways to secure the web-server and this is done by generating a pair of keys using Asymmetric encryption.
+
+						we use the openssl command to generate a private and public key at the server level and make it secure..
+
+						RUN:
+						openssl genrsa -out my-bank.key 1024 ---> this will generate a private key called my-bank.key
+						we then use the private key to generate a public key by running
+
+						openssl rsa -in my-bank.key -pubout > mybank.pem --> This will generate a public key called mybank.pem
+
+						With this we have secured the server..
+
+						NOW COMMUNICATION:
+
+						When the client first accesses the server over an https communication, the clients retreives a public key and since the hacker is in between the client and the server, the
+						hacker also gets hold of the public key.
+
+						Then client main goal is to securly send the symmetric key to the server so they can use it for all future communication..
+
+						The client then uses the public key it got from the server to encrypt the symmetric key and sends it back to the server.
+						The hacker then receives the encrypted data that has (The public key and the symmetric key) from the client, the server also receives the same and since the encryption
+						was done using the public key of the server, the server has the private key it will use to decrypt the data. The server then uses its private key to decrypt the data and retrives
+						the symmetric key.
+
+						The hacker is then left with the encrypted data since it does not have the private key to decrypted the data.
+
+						Remember: The key that was used to encrypt the data and decrypt it was the Asymmetric key generated at the web server.
+
+						We have successfully secured communication between a client and a server...
+						All future communication can then be done using the Symmetric keys.
+
+						The server can then encrypt data with the symmetric key and sends to the client and the client can then decrypt the data with symmetric keys he has also.
+						The same goes for the client, it can then encrypt data with his symmetric key and send to the server and the server decrypts it..
+
+						The hacker will be left with only encrypted messages...
+
+						Important:
+
+						The hacker seeing that he has been bypassed and that the  server and the client are able to communicate securly leaving him with encrypted data.
+						He then searches for new ways to trick/tweak the client server/network.
+						The hacker then clones the clients bank websites, builds a replica of the site, or the site the client is accessing..
+						He creates a server and hosts the site and also generates his sets of Asymmetric keys on the server to secure a https communication, making his server secured...
+
+						The Hacker then tweaks the clients server to route outing going requests from the clients on (https://alpha-bank.com) to his own server (the cloned site).
+
+						The client is now presented with similar websites as that of his original bank..
+						The client in this case the clients browser receives a public key from the hackers server when he accesses the site..
+						The client uses the public key sent by the hackers server to encrypt his symmetric key and sends it back to the hackers server.
+						The hacker decrypts the symmetric key and retreives it.
+
+						The hacker and the clients can now securly communicate with each other using the symmetric key...
+						The client then types in his credentials, a username and password of his bank account.
+
+						He is then presented with a dashboard different from that of his bank that says he has been hacked...
+
+
+						QUESTION:
+						What if you can look at the key from the servers be it the hackers server or any other server to determine its from the actual bank server?
+						When the server sends the public key, it does not send that alone. The server sends a certificate along with the key in it.
+						When you view the certificates you'll be able to tell if the certifcate is legitmate or not.
+						You will be able to tell the issuer of that certificate.
+
+						Informations found in the certificates:
+
+						Serial No --> cert NO
+						Issuer --> The CA that issued the certificate
+						Validity --> expiration
+						Subject --> CN=alpha-bank.com
+						Subject Alternative Name --> The sub domains for the bank or other dns names that users can use to reach your bank.
+						e.g. DNS:my-bank.com DNS:i-bank.com DNS:we-bank.com
+						Subject Public Key Info: The public key of the server.
+
+
+						If You look closely at the certificate sent by the hackers server, you'll notice that its a fake certificate and it was signed by the hacker himself..
+						The browsers has an inbuilt function that warns you about fake certifcates mimiking public available sites like banks,govt etc..
+
+						How do you get your your certificate signed by someone with authority?
+						That is where the CA comes in...
+
+						1. You generate a certificate signing request using the <my-bank.key> which is the private key you generated for the server when you ran,
+						openssl genrsa -out my-bank.key 1024 ---> this will generate a private key called my-bank.key
+
+						You then use this private key to create a certificate signing request..
+
+						by running:
+						openssl genrsa -out myuser.key 2048
+						openssl req -new -key myuser.key -out myuser.csr..
+
+
+						SUMMARILY:
+						An admin user generate a pair of keys to secure ssh connection to the server.
+						The server generates Asymmetric keys to secure https communication with the client. But b4 this is done, the server generates a csr and sends to the CA.
+						The CA uses their private key to sign the certificate and sends it back to the server.
+						When the client accesses the server, it retrives the servers certificate which has the servers public in it and which was signed by The CA.
+						The clients browser, which has the public keys of the CA, validates the certificate sent by the server and retrives the public key of the server.
+
+						The client then generate Symmetric key and uses the public key of the server to sign the symmetric key and sends this symmetric key to the server.
+						The server receives the symmetric key and uses his private key to decrypt the key sent by the client and retrievs the symmetric key.
+
+						Going forward all communication bw the client and the server are now going to be done using the symmetric key.
+
+						As part of trust building the client once establishes trust with the server. It then authenticates to the server/website using his username and password..
+
+
+						PROBLEM:
+
+						With the servers key pairs the client is able to determine that the server is who they say they are but, the server does not know for sure if the client is who they say they are.
+						To the server, it might be a hacker who gained access to the clients credentials obvioulsy not over the network since we have secured with TLS it but maybe via other means..
+
+						What can the server do to validate that the client is who they say they are?
+
+						For this the client has to generate a certificate signed by a trusted CA and send to the server for the server to validate that the client is who they say they are.
+
+						This whole infrastructure, include the CA, the server, the people, the process of generating and maintaining the certificate is called PKI (public key infrastructure)
+
+						Naming convention:
+						Certificate with public keys are named:
+						*.crt *.pem
+						server.pem
+						server.crt
+						client.pem
+						client.crt
+
+						Certificate with private keys are named:
+
+						*.key *-key.pem
+						server.key
+						server-key.pem
+						client.key
+						client-key.pem
+						.......................................
+
+						Important, private keys has .key as their extension or it has -key.pem in them...
+						Public keys has .pem as keys and .crt as certificates...
+
+
+						TLS in Kubernetes
+
+						The various component in the k8s cluster communicates with each other using TLS certificate..
+						We identify who the servers and clients are in the kubernetes cluster..
+
+						Servers:
+
+						1. The apiserver
+						2. The etcd
+						3. The kubelet
+
+						The kube-apiserver is a server that all component in the clusters communicates with. The kube-apiserver is the primary component that all others talks to in the cluster.
+						The kube-apiserver is the only component that talks to the etcd-server.
+
+						Communications.
+
+						1. Since all components interacts with the kube-apiserver, we will generate a certificate called.
+						apiserver.crt and apiserver.key
+
+						i. Also the apiserver is a client to the kubelet b/c it interacts with the kubelet with instructions to create a pod.
+						so we generate a set of certificate for it communicate with the kubelet.
+						apiserver-kubelet-client.crt and apiserver-kubelet-client.key
+
+						ii. Also the kube-apiserver is a client to the etcd cluster, b/c it interacts with the etcd to persist and retrive data.
+						so we generate a set of certificate for it communicate with etcd.
+						apiserver-etcd-client.crt and apiserver-etcd-client.key
+
+						2. The etcd cluster is a server also, so we generate a set of certificate for it.
+						etcd.crt etcd.key
+
+						3. The kubelet on the worker node is a server b/c the kube-apiserver communicates with the kubelet with instructions to schedule a pod on it node. so we generate a set of certificate for it.
+						kubelet.crt and kubelet.key
+						Also the kubelet is a client to the kube-apiserver b/c it interacts with the kube-apiserver with the information on the created pods on it node.
+						so we generate a set of certificate for it communicate with kube-apiserver.
+						kubelet-client.crt and kubelet-client.key
+
+						4. The scheduler communicates with the kube-apiserver to check for pod object that needs to be scheduled on a node.
+						Therefore the scheduler is a client to the kube-apiserver. so we generate a set of certificate for it communicate with the apiserver.
+						scheduler.crt and scheduler.key
+
+						5. The kube-controller-manager is a client to the kube-apiserver, it interacts with the kube-apiserver to monitor and manage the clusters resources, ensuring they conform to
+						the desired configuration and state.
+						so we generate a set of certificate for it communicate with the apiserver.
+						controller-manager.crt and controller-manager.key
+
+						6. The kube-proxy is another component who's a client to the kube-apiserver, it interacts with the kube-apiserver to get updates to changes in service configurations,
+						kube proxy needs to be aware
+						when services are created, updated, or deleted,
+						kube proxy needs to update its network rules accordingly to ensure that traffic is properly routed to the correct service endpoints.
+						To acheive this it watches the kubernetes API SERVER for changes in configuration.
+						so we generate a set of certificate for it to communicate with the apiserver.
+						kube-proxy.crt and kube-proxy.key
+
+
+						7. The admin user who will be accessing the cluster using the kubectl utility tool, needs a pair of certificate to interacts with the kube-apiserver.
+						  so we generate a set of certificate for it communicate with the apiserver.
+						  admin.crt and admin.key
+
+						 8.  These various Certificates needs to be signed by the CA.So we generate a set of certificate for CA.
+						 We called root certificate, ca.crt and ca.key
+
+
+						 Important: You can have a diff CA which is not the one used for the other k8s component to sign the etcd certificates.
+						 If you do, it means that same CA will have to sign the certificate that the kube-apiserver will use to authenticate with the etcd.
+
+						 However, of all the other components in the cluster we use one CA to sign their certificates....
+
+
+
+						 TLS in Kubernetes – Certificate Creation:
+						 Creating certificate using OPENSSL:
+						1. First we create/Generate the CA certificate using the openssl command:
+						openssl genrsa -out ca.key 2048 --> Generates the Certificate authority key..
+						This will output ca.key
+
+						2. Create a certificate signing Request.
+						We use the openssl command along with the key we created to generate a certificate signing request.
+						openssl req -new -key ca.key -subj "/CN=KUBERNETES-CA" -out ca.csr
+						This will output ca.csr
+
+						3. Sign the certificate using the x509 command.
+						Here you specify the csr and the signkey to be used in signing the cert.
+
+						openssl x509 req -in ca.csr -signkey ca.key -out ca.crt
+						This will output ca.crt
+
+						The above is the CA key and Root certifciate file, the CA used its key to sign its certifciate.
+
+						Going further, we will use the CA key to sign the rest of the certifcate signing request by the cluster components.
+						-----
+
+						Lets say we want to create to create a certificate for the admin user to authenticate via the kubectl utility to the cluster..
+
+						1. We generate key for the admin user.
+						openssl genrsa -out admin.key 2048
+						output admin.key
+
+						2. We Create a CSR.
+						openssl req -new -key admin.key -subj "CN/=KUBE-ADMIN" -out admin.csr
+						output admin.csr
+
+						3. We sign the CSR using the CA KEY AND THE CA CERTIFICATE and generate a certificate:
+
+						openssl x509 req -in admin.csr -CAkey ca.key -CA ca.cert -out admin.crt
+						output admin.crt
+
+						Important: You have signed the certificate using the CA key and Cert files and that makes it a valid certificate..
+						The certicate is what the admin user will use to authenticate to the kubernetes cluster..
+						This whole process is similar to creating a username name and password.
+						The certificate is like a userid/username and the key is like a password.
+						The only different from those is that the key and certificate is much more secured..
+
+						This certificate admin.crt is for the admin user, how do you differenciate this user from any other user in the cluster?
+
+						A group named system:masters exists in kubernetes with administrative privileges.
+						add this system:masters using the OU parameter when creating the csr for the admin user.
+
+						therefore in creating the csr, it will be:
+						openssl req -new -key admin.key -subj "CN/=kube-admin/O=system:masters" -out admin.csr
+						output admin.csr
+
+						Important, we follow the same process to create certificate for all other clients that access the kube-apiserver.
+
+						2. Create a certificate for the kube-scheduler
+						The kube-scheduler is a system component its name should be prefixed with the key word system.
+						1. We generate key for the scheduler.
+						openssl genrsa -out scheduler.key 2048
+						output scheduler.key
+
+						2. We Create a CSR.
+						openssl req -new -key scheduler.key -subj "CN/=system:kube-scheduler" -out scheduler.csr
+						output scheduler.csr
+
+
+						3. We sign the CSR using the CA KEY AND THE CA CERTIFICATE and generate a certificate:
+
+						openssl x509 req -in scheduler.csr -CAkey ca.key -CA ca.cert -out scheduler.crt
+						output scheduler.crt
+
+						Note: Follow the same process to create a certificate for the kube-controller-manager,kube-proxy and other client certificates.
+						Such as the apiserver-kubelet-client.crt, apiserver-kubelet-client.key and apiserver-etcd-client.crt, apiserver-etcd-client.crt
+						kubelet-client.crt, kubelet-client.key
+
+						They do not require the OU parameters..
+
+
+						Making an api call using the created certificate such as the admin user cert and key.
+
+						curl https://kube-apiserver:6443/api/v1/pods \
+						--key admin.key \
+						--cert admin.crt \
+						--cacert ca.crt
+
+						Break down:
+
+                        Reference: https://kubernetes.io/docs/setup/best-practices/certificates/
+
+						The `curl` command you provided is attempting to access the Kubernetes API server to retrieve a list of pods using client certificates
+						and the cluster's CA certificate for authentication and secure communication.
+						This command should work if the certificates are correctly configured and valid. Here's a breakdown of the command:
+
+						- `https://kube-apiserver:6443/api/v1/pods`: This is the URL of the Kubernetes API server endpoint for retrieving pod information.
+
+						- `--key admin.key`: This option specifies the client's private key (`admin.key`) for authentication.
+
+						- `--cert admin.crt`: This option specifies the client's certificate (`admin.crt`) for authentication.
+
+						- `--cacert ca.crt`: This option specifies the cluster's CA certificate (`ca.crt`) for verifying the authenticity of the Kubernetes API server's certificate.
+
+						Before using this command, make sure the following is in place:
+
+						1. **Certificate Files**: Ensure that the `admin.key`, `admin.crt`, and `ca.crt` files exist and are correctly configured.
+
+						2. **Client Certificate and Key**: The `admin.key` and `admin.crt` files should match a valid client certificate and key pair that have the necessary permissions to access the Kubernetes API server.
+
+						3. **CA Certificate**: The `ca.crt` file should be the CA certificate used by your Kubernetes cluster for server certificate verification.
+
+						4. **Kubernetes API Server**: The URL `https://kube-apiserver:6443` should point to the correct Kubernetes API server and be accessible from the machine where you are running `curl`.
+
+						5. **Network Access**: Ensure that your machine has network access to the Kubernetes API server on port 6443.
+
+						6. **Authorization**: Depending on your Kubernetes cluster's RBAC configuration, you may need the appropriate permissions to access the `/api/v1/pods` endpoint.
+
+						If everything is set up correctly, the `curl` command should be able to communicate with the Kubernetes API server and retrieve information about pods in your cluster.
+
+
+						NOW WE HAVE CREATED CERTIFICATE FOR THE KUBE-APISERVER.
+						The kube-apiserver is the most popular component in the kubernetes cluster.
+						Everyone talks to the kube-apiserver, every operations goes through the kube-apiserver, anything moving in the cluster the apiserver knows about it.
+						You need information, you talk to the apiserver.
+						Therefore, it goes by many names and aliases, its known as the kube-apiserver, many call it kubernetes.
+						For alot of people who dont know what goes on under the hood in kubernetes, the apiserver is kubernetes.
+						some call it kubernetes.default, some kubernetes.default.svc, some kubernetes.default.svc.cluster.local
+
+						In most cases, it is also refferred to as by the IP.. i.e The IP address of the host or the pod running the kube-apiserver.
+
+						All these names most be present in the certificate generated for the kube-apiserver.
+						This names should be passed in the  common Name (CN) "/CN=kube-apiserver" while generating the csr.
+						So anyone connecting to the kube-apiserver using these known names can reach it or establish a valid connection.
+
+						NB: The csr is a certificate without a signature.
+
+						Important: These names cannot be passed via the command line, Youll have to create an openssl.cnf configuration file
+						OR alternate names file where the names will be entered and passed as an option while creating the csr.
+
+						Example. The openssl.cnf file for the apiserver that should be passed as options while creating the csr for the apiserver certificate.
+						openssl.cnf
+
+						[ req ]
+						req_extensions = v3_req
+						distinguished_name = req_distinguished_name
+
+						[ v3_req ]
+						basicConstraints=CA:FALSE
+						keyUsage=nonRepudiation,
+						subjectAltName=@alt_names
+
+						[ alt_names ]
+						DNS.1 = kubernetes
+						DNS.2 = kubernetes.default
+						DNS.3 = kubernetes.default.svc
+						DNS.4 = kubernetes.default.svc.cluster
+						DNS.5 = kubernetes.default.svc.cluster.local
+						IP.1 = <MASTER_IP>
+						IP.2 = <MASTER_CLUSTER_IP>
+
+
+
+					https://kubernetes.io/docs/tasks/administer-cluster/certificates/
+
+					RUN:
+
+					1. We generate key for the kube-apiserver.
+					openssl genrsa -out apiserver.key 2048
+					output apiserver.key
+
+					2. We Create a CSR.
+					openssl req -new -key apiserver.key -subj "CN/kube-apiserver" -config openssl.cnf -out apiserver.csr
+					output apiserver.csr
+
+					3. We sign the CSR using the CA KEY AND THE CA CERTIFICATE and generate a certificate for the apiserver:
+
+					openssl x509 -req -in apiserver.csr -CA ca.crt -CAkey ca.key \
+					    -CAcreateserial -out apiserver.crt -days 1000 \
+					    -extensions v3_req -extfile openssl.cnf
+
+						output apiserver.crt
+
+						Important:
+						While configuring the kube-apiserver executable, Youll have to pass all the certificate and the CA certificate at each aspect in the configuration that it uses to communicate
+						with the kubelet as a client, the etcd as a client and its tls certificate as a server.
+
+						Example:
+
+
+						Describe the kube-apiserver pod for the configurations on how the 3 diff certificates where passed.
+
+						NOW WE HAVE THE KUBELET SERVER CERTIFICATE...
+						Create a certificate for the kubelet server, depending on the number of nodes in the cluster say node01 to 10th node.
+						You must name the certificate with the node prefix to differenciate it with the other cert in other nodes.
+						eg
+						1. We generate key for the admin user.
+						openssl genrsa -out kubelet-node01.key 2048
+						output kubelet-node01.key
+
+						2. We Create a CSR.
+					    openssl req -new -key kubelet-node01.key -subj "CN/kubelet-node01" -out kubelet-node01.csr
+					     output kubelet-node01.csr
+
+
+ 						3. We sign the CSR using the CA KEY AND THE CA CERTIFICATE and generate a certificate:
+
+ 						openssl x509 req -in kubelet-node01.csr -CAkey ca.key -CA ca.cert -out kubelet-node01.crt
+ 						output kubelet-node01.crt
+
+						Important: Once the certificate has been created, use the kubelet-node01.crt, the ca.crt and kubelet-node01.key to configure the kubelet config.yaml file.
+						Youll have to pass the cert options..
+						You must do this in all the nodes in the cluster...
+
+
+						THE KUBELET NODES CLIENT CERTIFICATE:
+						The kubelet uses this to authenticate with the kube-apiserver.
+						What do we name these certificates????
+						The apiserver needs to know which node is authenticated and gives it the right permission..
+						the apiserver requires the nodes to have the right names in the right format.. Since the nodes are system components like the scheduler, the controller manager.
+						The format or naming convention starts with the keyword system.
+						example.
+						system:node:node01 ---> This is the naming convention and should be in the CN.
+						How will the apiserver give it the right permission like we did for the admin user??????????
+
+						AS WE DID FOR THE ADMIN USERS.. WHILE GENERATING THE CERTIFICATE, WE WILL HAVE TO USE THE OU OPTIONS TO ADD THE GROUP DETAILS OF SYSTEM:NODES
+						WHEN CREATING CSR for the kubelet nodes client certificate.
+
+						therefore in creating the csr, it will be:
+						openssl req -new -key kubelet-client-node01.key -subj "CN/=system:node:node01/O=system:nodes" -out kubelet-client-node01.csr
+						output kubelet-client-node01.csr
+
+
+
+
+
+						View Certificate Details::::
+						https://kubernetes.io/docs/tasks/administer-cluster/certificates/
+
+						command:
+						  openssl req  -noout -text -in ./server.csr
+
+						  This will be dependent on how your cluster was setup.
+						  If you deployed your cluster the hardway then you will have to create the entire certificate by yourself.
+						  If the cluster was deployed using the kubeadm tool, kubeadm sets up the entire certificates for you as they run in pods.
+						  Its important to know this in other to determine where to look for the certificates.
+
+						  Viewing the kube-apiserver certificates...
+
+						  cat /etc/kubernetes/manifests/kube-apiserver.yaml
+
+						  Check the command option, it has the commands used to start the kube-apiserver.
+						  Identify the individual certificates used by the apiserver. View it and understand it in details...
+						  RUN:
+
+						  openssl X509  -in <pathto the crt file> -noout -text
+  						View Certificate Details::::
+  						https://kubernetes.io/docs/tasks/administer-cluster/certificates/
+
+  						command:
+  						  openssl req  -noout -text -in ./server.csr
+
+
+						  Toubleshooting:
+
+						  Inspect service logs:
+
+						  journalctl -u etcd-service -l ---> Use this to view system logs if you configured your certificate using native services.
+
+						  If your cluster is deployed using kubeadm tool.
+						  RUN:
+						  kubectl logs <pod-name>
+
+						  Sometimes if the kube-apiserver is down, the kubectl command will not work.
+						  You have to go one level down to troubleshoot using (docker ps -a or crictl ps -a) depending on the CNI installed in the cluster.
+						  docker container ls
+						  docker container logs <containerID>
+						  crictl logs <containerID>
+						  https://kubernetes.io/docs/tasks/debug/debug-cluster/crictl/#example-crictl-commands
+
+
+
+						  ISSUE:
+						  k get pods
+						  Error from server (Timeout): the server was unable to return a response in the time allotted, but may still be processing the request (get pods)
+
+						  PROBLEM:
+						  The kubectl command stopped working, someone modified the /etc/kubernetes/manifests/etcd.yaml file.
+
+						  the cert file was modified..
+
+						  ISSUE:
+
+						  controlplane ~ ➜  k get pods
+						  Get "https://controlplane:6443/api/v1/namespaces/default/pods?limit=500": dial tcp 192.23.158.9:6443:
+						  connect: connection refused - error from a previous attempt: read tcp 192.23.158.9:43784->192.23.158.9:6443: read: connection reset by peer
+
+						  Solution:
+						  Run
+						  crictl ps -a ---> check the exited container, the apiserver container and check the logs.
+						  crictl logs <containerid>
+
+						  LOGs output:
+
+						  "Type": 0,
+						  "Metadata": null
+						}. Err: connection error: desc = "transport: authentication handshake failed: tls: failed to verify certificate: x509: certificate signed by unknown authority"
+						E0927 22:58:45.113664       1 run.go:74] "command failed" err="context deadline exceeded"
+
+
+
+
+
+
+						CERTIFICATE API:
+						Lets say as the only admin in the cluster, someone joins my organization. Iam tasked with granting the user access to the cluster.
+						I ask the user to generate a key using the openssl genrsa -out jane.key 2048
+
+						The user also generates a certificate signing request,
+						2. We Create a CSR.
+					    openssl req -new -key jane.key -subj "CN/=jane" -out jane.csr
+					     output jane.csr
+
+						 She then sends me this CSR, as the only one with access to the cluster where the CA KEY AND CA cert are i use these to sign the users CSR and send back the certificate to her
+						 for an access to the cluster. This certificate has a validity period, i keep rotating the certificate each time it expires by asking her to generate a new one and i sign it with the CA
+
+						 Each time a new user joins again, the process is repeated and when the number of users increases this becomes a tidious job..
+
+						 The Certificate API, allows us to automate the process of certificate approval and deny.
+						 It allows us to secure the CA servers which is a safe storage of the CAkey and CA cert used in signing the csr.
+						 There4 the CA server is nothing but a server where we safe store the CAkey and CA certificates..
+						 Anyone with access to this server can create as many users as they want and with any permission they want.
+
+
+This is why we need to secure the CA server..
+
+
+Automating CERTIFICATE SIGNING:
+------------------------------
+Kubernetes has a certificate API, with certificate api you can send csr to the CA server and all administrator will see this as pending csr in the cluster.
+
+Process:
+The new user generates a set of keys, create a csr and send the csr to me the admin user.
+The admin user creates a CertificateSingingRequest object. In this CSR object, the details of the new users csr is entered into it.
+Things like the encoded csr.
+
+ Example:
+			             apiVersion: certificates.k8s.io/v1
+						 kind: CertificateSigningRequest
+						 metadata:
+						   name: jane-csr
+						 spec:
+						   request: <base64_encoded_csr>
+						   signerName: kubernetes.io/kube-apiserver-client
+						   usages:
+						   - client auth
+
+						   ---
+						   apiVersion: certificates.k8s.io/v1
+						   kind: CertificateSigningRequest
+						   metadata:
+						     name: jane-csr
+						   spec:
+						     request: <base64_encoded_csr>
+						     signerName: kubernetes.io/kube-apiserver-client
+						     usages:
+						     - client auth
+						   subject:
+						     commonName: jane
+						     organization:
+						     - system:masters
+						     - my-group
+
+
+
+						  Important: The admin user creates this using the kubectl commands, the requests can be reviewed, approved, deny using the kubectl commands.
+						  The certificate is then extracted and shared with the user for authenticating into the k8s cluster....
+
+
+						  HOW IS IT DONE?????
+
+						  1. user generates key:
+						  openssl genrsa -out jane.key 2048
+
+						  2. user creates a csr using openssl command
+						  openssl req -new -key jane.key -sub "/CN=jane" -out jane.csr
+
+						  She sends the csr to the admin user.
+
+						  3. The admin user creates a csr api object as shown below.
+
+ 						 apiVersion: certificates.k8s.io/v1
+ 						 kind: CertificateSigningRequest
+ 						 metadata:
+ 						   name: jane
+ 						 spec:
+ 						   request: <base64_encoded_csr>
+ 						   groups: <The group the user belongs to in linux eg system:masters or system:authenticated, theyre all list and should have -
+ 						   usages:  ---> The use of the certificate, just for auth or gital signature or key encipherment. They all list and should have -, ?
+ 						   - client auth
+
+
+						https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/#certificate-signing-requests
+
+						Some points to note:
+
+						    usages has to be 'client auth'
+
+						    expirationSeconds could be made longer (i.e. 864000 for ten days) or shorter (i.e. 3600 for one hour)
+
+						    request is the base64 encoded value of the CSR file content. You can get the content using this command:
+
+							cat jane.csr | base64 | tr -d "\n"
+							The command you provided is used to encode a Certificate Signing Request (CSR) in base64 format and remove newline characters from the resulting encoded string.
+							Here's how it works step by step:
+
+							1. `cat jane.csr`: This part of the command reads the contents of the file `jane.csr` and outputs it to the standard output.
+
+							2. `|`: This pipe character takes the output from the previous command and passes it as input to the next command.
+
+							3. `base64`: This command encodes the input data in base64 format, making it suitable for use in various data transmission and storage purposes.
+
+							4. `|`: Another pipe character to pass the base64-encoded data to the next command.
+
+							5. `tr -d "\n"`: This `tr` command is used to delete (remove) newline characters (`\n`) from the input data.
+
+							When you run this entire command, it will read the contents of the `jane.csr` file, encode it in base64,
+							and then remove any newline characters from the base64-encoded output. The result will be a single, continuous base64-encoded string without line breaks.
+
+
+
+							Approve the CertificateSigningRequest
+
+							Use kubectl to create a CSR and approve it.
+
+							Get the list of CSRs:
+
+							Commands:
+							kubectl get csr
+
+
+							Approve the CSR:
+
+							kubectl certificate approve jane
+
+							Get the certificate
+
+							Retrieve the certificate from the CSR:
+
+							kubectl get csr/jane -o yaml
+
+							Important:
+
+							The certificate value is in Base64-encoded format under status.certificate.
+
+							Important:
+
+							Export the issued certificate from the CertificateSigningRequest.
+
+							kubectl get csr jane -o jsonpath='{.status.certificate}'| base64 -d > jane.crt
+							...
+							https://kubernetes.io/docs/tasks/administer-cluster/certificates/
+
+
+							WHO DOES ALL OF THESE FOR US???
+							All of the certificate signing operations are done by the kube-controller-manager.
+							It uses controllers like CSR approving CSR signing to do all of these for us.
+
+							We know that for anyone to sign certificate, they need the CA server root certificate and key.
+							Does the controller manager have these keys?
+
+							If you cat /etc/kubernetes/manifests/kube-controller-manager youll notice an option in the kube-controller-manager called
+							--cluster-signing-cert-file=/etc/kubernetes/pki/ca.crt
+							--cluster-signing-key-file==/etc/kubernetes/pki/ca.key
+
+							This options also enables the contoller-manager to sign/approve/deny a csr.. thus automating the certificate creation process.
+
+
+							LAB:
+							KubeConfig
+
+							The admin user makes an api call using the curl command.
+
+							curl https://my-kube-playgroud:6443/api/v1/pods \
+							--cert amdin.crt \
+							--key admin.key \
+							--cacert ca.key
+
+							HOW CAN YOU DO THIS USING THE kubectl utility?
+
+							You can specify it using kubectl utility by running..
+
+							kubectl get pods \
+							--server my-kube-playgroud:6443 \
+							--client-certificate amdin.crt \
+							--client-key admin.key \
+							--certificate-authority ca.key
+
+							Important:
+							Typing this each time you want to make an api call to the apiserver is a tidious tasks.
+							You then move this into a file called kubeconfig file..
+
+							Create a file called config:
+
+							--server my-kube-playgroud:6443 \
+							--client-certificate amdin.crt \
+							--client-key admin.key \
+							--certificate-authority ca.key
+
+							In the users home directory which is $HOME/.kube/config
+
+							This is the default place where the kubectl command line utility goes first to check for the kubeconfig file b4 performing your actions.
+
+							Important:
+							You have not been specifying the cacert,key,cert options when calling the kubernetes api b/c theyre already in the .kube folder and kubectl check that folder
+							and uses the file in there.
+
+							The config file or the kubeconfig file is in a specific format:
+
+							https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/
+
+							Example:
+							Define clusters, users, and contexts
+
+							kubeconfig or config file has 3 top fields that are required.
+
+							clusters, contexts and users. This top fields are arrays or lists.
+
+							Suppose you have two clusters, one for development work and one for test work. In the development cluster,
+							your frontend developers work in a namespace called frontend, and your storage developers work in a namespace called storage. In your test cluster,
+							developers work in the default namespace, or they create auxiliary namespaces as they see fit. Access to the development cluster requires authentication by certificate.
+							 Access to the test cluster requires authentication by username and password.
+
+							Create a directory named config-exercise. In your config-exercise directory, create a file named config-demo with this content:
+
+Important: To see only the configuration information associated with the current context, use the --minify flag.
+
+kubectl config --kubeconfig=config-demo view --minify
+
+This link tells you all you need about the kubeconfig --; https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/
+
+
+
+
+							API Groups:
+							https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/
+							https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.28/
+							The kubernetes api are divided into 2 groups, the core api and the named api.
+							The core api inlcudes the pods,cm,secrets,volume,job,
+							For the named apis we have metrics,logs,healthz etc and theyre futher divided into deplyments which are resources etc
+
+
+							Example
+
+							curl https://my-kube-playgroud:6443/api/v1/pods \
+							--cert amdin.crt \
+							--key admin.key \
+							--cacert ca.key
+
+							we are intrested in the /api and /v1 which is the /api and /version we also have /metrics /logs /healthz /apis
+
+							The version api is for viewing the version of the cluster.
+							The metrics api is for the metrics of the cluster, the logs for integrating third party apps, the healthz is for the healthz.
+
+							The apis responsible for the functionality of the cluster are the /api /apis
+
+							Authorization:
+							So far we have talked about authentication..
+							What is authorization?
+							Once you have been authenticated, what you can do defines authorization...
+							As an admin of the cluster, you're able to create and delete resources in the kubernetes cluster.
+							As the workloads grows, and new users join your org.. You wont give them the same access to yours, youll limit their access based on their tasks in the cluster.
+
+							SAY FOR A:
+							Developer, Bot or serviceaccount you will not grant these entities the access to delete nodes and modify certain resources in the cluster.
+							Authorization granted to them, defines the actions they can take in the k8s cluster.
+							You might decide to limit them to a certain namespace as that is where their operation is needed.
+							Authorization enables you do all of these......
+
+							Authorization Mechanism:
+							There are diff authorization mechanism, RBAC,ABAC, NODE, WEBHOOK.
+							RBAC: This is the more better way of granting authorization to users of your cluster.
+							With RBAC, you define a role for groups say "developers" and associate all the developer to that role.
+							Similarly, you can create a role for security users <security1> give it the right permission and associate the security users into it.
+							Important: Whenever theres a change to be made in the users permissions or role, we modify the role and the changes will reflect on all users..
+
+							You can also define a role to a specific user and add the user to that policy and each time you need to make a modification on the users
+                             permission, you update the policy and it ref
+
+ACCESS THE KUBERNETES API:
+                            1. Start the kubectl proxy client by running.
+                            kubectl proxy
+                            This will start the proxy at 127.0.0.1:8001, and it will allow you to access the Kubernetes API server from your local machine
+                            This will start the kubectl proxy at 127.0.0.1:8001
+                            To list all available API versions:
+                            curl localhost:8001/apis -k
+
+                            To list the core API group:
+                            curl loalhost:8001/api -k
+More:
+curl localhost:8001/apis/networking.k8s.io/v1 -k
+To access a specific API group, you need to know the group name. For example, if you want to access the "apps" API group, which includes
+resources like Deployments and StatefulSets, you can run the following command:
+curl localhost:8001/apis/apps/v1 -k
+
+Please note that the -k flag is used to skip SSL certificate validation when using curl. This is necessary because the Kubernetes API server often uses self-signed
+certificates for local development.
+Make sure that your Kubernetes cluster is up and running, and the kubectl configuration is set to the correct context for your cluster before running these commands.
+
+							DEEPDIVE INTO RBAC:
+
+							We create a sample Role.
+							example:
+
+							apiVersion: rbac.authorization.k8s.io/v1
+							kind: Role
+							metadata:
+							  namespace: default
+							  name: pod-reader
+							rules:
+							- apiGroups: [""] # "" indicates the core API group
+							  resources: ["pods"]
+							  verbs: ["create", "get", "watch", "list"]
+  							- apiGroups: [""] # "" indicates the core API group
+  							  resources: ["configmaps"]
+  							  verbs: ["create"]
+
+							  each rules has 3 sections: remember rules is a list.
+							  apiGroups --> name of apiGroups you want to grant it access granted to users/groups
+							  resources --> Resources you want to give access to eg ["pods"]
+							  verbs --> Actions to be permformed by the users/groups
+
+							  Important:
+							  For the core apiGroups you leave the apiGroups section as empty/blank [""]
+							  For the named apiGroups provide the name of their apiGroups.
+
+							  We create the role, by running kubectl create -f <path-to-the-file>
+
+							  NEXT:
+							  We link the user/users/groups/sa to that role we have created.. To do this we create another object called RoleBinding...
+
+							  example:
+							  apiVersion: rbac.authorization.k8s.io/v1
+							  # This role binding allows "jane" to read pods in the "default" namespace.
+							  # You need to already have a Role named "pod-reader" in that namespace.
+							  kind: RoleBinding
+							  metadata:
+							    name: read-pods
+							    namespace: default
+							  subjects:
+							  # You can specify more than one "subject"
+							  - kind: User
+							    name: dev-user # "name" is case sensitive
+							    apiGroup: rbac.authorization.k8s.io
+							  roleRef:
+							    # "roleRef" specifies the binding to a Role / ClusterRole
+							    kind: Role #this must be Role or ClusterRole
+							    name: pod-reader # this must match the name of the Role or ClusterRole you wish to bind to
+							    apiGroup: rbac.authorization.k8s.io
+
+								Important:
+								The subjects, is a list or array and its on the subject we provide the User the role we created is for,
+								this is how u link the role to a user/group/sa. You can specify multiple users by using:
+
+  							  subjects:
+  							  # You can specify more than one "subject"
+  							  - kind: User
+  							    name: first-user # "name" is case sensitive
+  							    apiGroup: rbac.authorization.k8s.io
+    						  - kind: User
+    							name: second-user # "name" is case sensitive
+    							apiGroup: rbac.authorization.k8s.io
+      						  - kind: User
+      							name: third-user # "name" is case sensitive
+      							apiGroup: rbac.authorization.k8s.io
+
+								......................
+								Also in the kind section instead of User, you can provide Group, ServiceAccount
+
+								Important:
+								the roleRef section is where we provide the details of the role we created earlier...
+
+								Very Important:
+								The role and role binding objects falls under namespaces..
+								If you dont specify a namespace in the role and rolebinding objects, it will use the default namespace.
+								Which means the users associated to that role will only manage resources in the default namesapce.
+								Under the metadata section you can specify you can specify a namespace to grant the users access to a defined namespace.
+
+								AS A USER IN THE CLUSTER HOW CAN I KNOW IF I CAN MANAGE CERTAIN RESOURCES???
+								----------------------------------------------------------------------------
+
+								RUN:
+
+								kubectl auth can-i create deployments
+								kubectl auth can-i create pods
+								kubectl auth can-i delete nodes
+
+								This will tell you if you have the permission or not..
+
+								AS AN ADMIN, YOU WOULD LIKE TO TEST IF THE PERMISSION YOU GRANTED ON A USER IS OK WITHOUT AUTHENTICATING WITH THE USER CERT FILE,KEY AND CACERT.
+
+								Lets say the user is dev-user.
+
+								RUN:
+
+							  kubectl auth can-i create deployments --as dev-user
+							  Youll receive no b/c dev-user does not have the permission.
+							  The permission is only to create pods
+
+							   kubectl auth can-i create pods --as dev-user
+							   output: yes
+
+							   kubectl auth can-i create pods --as dev-user --namespace test
+							   output: no, b/c the permission is for default namespace...
+
+
+							   NOTE: You limit users access to a specific resource in the cluster.
+							   Say we have orange pods and blue pods running in the cluster in the defined namespace and you want to limit a user access to a specific pod.
+							   In the role definition file, add a filed called.
+							   resourceNames under the rules and give the value or name of the pod or resource.
+							   eg.
+
+							   resourceNames: ["blue", "black"]
+
+
+							   ---sample role
+ # Please edit the object below. Lines beginning with a '#' will be ignored,
+# and an empty file will abort the edit. If an error occurs while saving this file will be
+ # reopened with the relevant failures.
+							   #
+							   apiVersion: rbac.authorization.k8s.io/v1
+							   kind: Role
+							   metadata:
+							     creationTimestamp: "2023-09-30T15:40:58Z"
+							     name: developer
+							     namespace: blue
+							     resourceVersion: "2865"
+							     uid: a612c6ea-dd90-4734-b0d4-51e5006a6770
+							   rules:
+							   - apiGroups:
+							     - ""
+							     resourceNames:
+							     - blue-app
+							     - dark-blue-app
+							     resources:
+							     - pods
+							     verbs:
+							     - get
+							     - watch
+							     - create
+							     - delete
+
+								 Important: Roles and Rolebindings are namespace scoped. If you dont specify a namespace on them, they will use the default namespace..
+								 Resources like nodes cant be categorized as namespaced scopped, theyre cluster scope resources.
+
+								 There4 we can categorize resources as namespace scoped resources and clusterwide resources..
+
+								 namespaced scoped resources are:
+								 Services, pvc,deployments,rs,rc,endpoints,events,configmaps,pods,jobs,secrets, roles and rolebindings
+
+								 Cluster Wide Resources:
+								 clusterRole,ClusterRoleBinding,CertificateSigningRequest,pv,namespaces,nodes
+
+								 To get the full lists of namespace scoped resources and cluster wide resources RUN:
+								 kubectl api-resources --namespaced=true  ---> Lists namespace scoped Resources
+								  kubectl api-resources --namespaced=false ---> lists ClusterWide Resources
+
+								  ALSO RUN TO GET THE apiGroups of a resource run:
+								   kubectl api-resources --namespaced=true
+								    kubectl api-resources --namespaced=false
+
+									Check the APIVERSION FILED:
+									The core groups has v1 remove the v1 and use [""] which means empty or blank.
+									The named Groups eg. deployments has  apps/v1  remove the /v1 and use the first part which is ["apps"]
+									The same goes for others in the list..
+
+									command to list without headers:
+									k get clusterrole -A --no-headers | wc -l
+
+
+									Examples:
+								    cat michelle.yaml
+
+
+								   apiVersion: rbac.authorization.k8s.io/v1
+								   kind: ClusterRole
+								   metadata:
+								     name: storage-admin
+								   rules:
+								   - apiGroups: [""]
+								     #
+								     # at the HTTP level, the name of the resource for accessing ConfigMap
+								     # objects is "configmaps"
+								     resources: ["persistentvolumes"]
+								     verbs: [ "get", "create", "delete"]
+								   - apiGroups: [storage.k8s.io]
+								     #
+								     # at the HTTP level, the name of the resource for accessing ConfigMap
+								     # objects is "configmaps"
+								     resources: ["storageclasses"]
+								     verbs: [ "get", "create", "delete"]
+								   ---
+								   apiVersion: rbac.authorization.k8s.io/v1
+								   # This cluster role binding allows anyone in the "manager" group to read secrets in any namespace.
+								   kind: ClusterRoleBinding
+								   metadata:
+								     name: michelle-storage-admin
+								   subjects:
+								   - kind: User
+								     name: michelle # Name is case sensitive
+								     apiGroup: rbac.authorization.k8s.io
+								   roleRef:
+								     kind: ClusterRole
+								     name: storage-admin
+								     apiGroup: rbac.authorization.k8s.io
+
+
+
+									 VERY VERY IMPORTANT:
+As you know, there are certain groups that exists in the kubernetes cluster and examples of such groups include system:masters.
+Note that once you create a key and csr for a user and sign that CSR using the CA key and CAcert to get the user authenticated to the cluster.
+If in creating the csr you added the user to OU system:masters, and when granting authorization to the user using RBAC,
+you create a clusterrole say to create, delete, get pods and deployments
+and binds its using clusterrolebinding and in the subject you specify kind as Group and name as system:masters b/c
+that user was added to the group system:masters when generating the
+csr will he/she inherite the clusterrole associated to that group system:masters???
+
+Can we also add a user to a non existing OU in kubernetes when generating CSR for authentication and use that group while creating RBAC to grant permission??
+The answer is YES..
+
+
+ SOLUTION:
+
+In Kubernetes, adding a user to the `system:masters` group during the creation of a certificate signing request (CSR) and then binding that group to a ClusterRole using
+a ClusterRoleBinding will grant the user the permissions associated with that ClusterRole. So, in your scenario:
+
+ 1. You create a user and generate a CSR.
+2. During CSR creation, you add the user to the `OU system:masters`.
+3. You sign the CSR using the CA key and CA certificate to authenticate the user to the cluster.
+4. You create a ClusterRole that allows actions like creating, deleting, getting pods and deployments.
+5. You create a ClusterRoleBinding that binds the `system:masters` group to the ClusterRole.
+
+In this case, the user, because they are part of the `system:masters` group, will inherit the permissions associated with the ClusterRole.
+This is because Kubernetes RBAC allows you to grant permissions to groups just like you would to individual users. By binding the `system:masters` group to the ClusterRole,
+any user who is part of that group will have the permissions defined in the ClusterRole.
+
+Here's an example of what the ClusterRole and ClusterRoleBinding might look like in YAML:
+
+									 ```yaml
+									 apiVersion: rbac.authorization.k8s.io/v1
+									 kind: ClusterRole
+									 metadata:
+									   name: my-cluster-role
+									 rules:
+									 - apiGroups: [""]
+									   resources: ["pods", "deployments"]
+									   verbs: ["create", "delete", "get"]
+
+									 ---
+
+									 apiVersion: rbac.authorization.k8s.io/v1
+									 kind: ClusterRoleBinding
+									 metadata:
+									   name: my-cluster-role-binding
+									 subjects:
+									 - kind: Group
+									   name: system:masters
+									   apiGroup: rbac.authorization.k8s.io
+									 roleRef:
+									   kind: ClusterRole
+									   name: my-cluster-role
+									   apiGroup: rbac.authorization.k8s.io
+									 ```
+
+									 In this example, the `my-cluster-role` grants permissions for creating, deleting, and getting pods and deployments within the cluster. The `my-cluster-role-binding`
+									 binds the `system:masters` group to the `my-cluster-role`, so any user who is part of the `system:masters` group will inherit these permissions.
+
+									 Important:
+									 Always use help. e.g
+									 kubectl create clusterrole --help
+
+
+
+									 Service Accounts:
+									 https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+
+									 ServiceAccounts are used for authenticating machines,pods or external application into the kubernetes cluster.
+									 You create a service account and use the TokenRequest API to create a token with time bound for the service account.
+									 When that Service account or Token gets associated to a resource,machine or external apps that requires it they get authenticated into the cluster..
+
+									 NB: Authentication is differnt from authorization... You get authenticate first and then your role in the cluster gets defined using authorization mechanism.
+
+									 To create a Kubernetes ServiceAccount and generate a token with an expiration using the TokenRequest API, you can follow these steps:
+
+									   1. Create a ServiceAccount:
+
+										 apiVersion: v1
+										 kind: ServiceAccount
+										 metadata:
+			   						   name: my-serviceaccount
+
+										   Save this YAML to a file, e.g., serviceaccount.yaml, and apply it using kubectl apply -f serviceaccount.yaml.
+
+									2. Create a TokenRequest with an expiration time. You can specify the expiration time in seconds from the current time.
+											For example, to generate a token that expires in 1 hour (3600 seconds):
+
+											apiVersion: authentication.k8s.io/v1
+											kind: TokenRequest
+											metadata:
+											  name: my-tokenrequest
+											spec:
+											  audience: "api"
+											  expirationSeconds: 3600
+											  token: "" # Leave this empty
+
+							3. Create a TokenRequest and specify the serviceAccountName in the spec section to associate it with the desired ServiceAccount:
+							apiVersion: authentication.k8s.io/v1
+							kind: TokenRequest
+							metadata:
+							  name: my-tokenrequest
+							spec:
+							  audience: "api"
+							  expirationSeconds: 3600
+							  serviceAccountName: my-serviceaccount # Associate with the desired ServiceAccount
+							  token: "" # Leave this empty
+
+							  This way the tokenRequest API gets associated to a service account.
+
+							  -------------------------------------------
+
+							  Doing this imperatively:
+							  1. kubectl create serviceaccount my-serviceaccount
+							  2. kubectl create token my-serviceaccount <tokenname>
+							  you can ignore token name
+
+							  This creates a sa and a token for that sa
+
+											  Save this YAML to a file, e.g., tokenrequest.yaml, and apply it using kubectl apply -f tokenrequest.yaml.
+
+											      Wait for a few moments to let the TokenRequest create a TokenRequest object in your cluster.
+
+						Retrieve the generated token using kubectl:
+
+						kubectl get tokenrequests.authentication.k8s.io my-tokenrequest -o jsonpath='{.status.token}'
+
+						This command will output the generated token, which will expire after the specified duration (in this example, 1 hour).
+
+
+				4. To mount a token from a ServiceAccount as a projected volume in a Kubernetes pod, you can follow these steps:
+
+				apiVersion: v1
+				kind: Pod
+				metadata:
+				  name: my-pod
+				spec:
+				  serviceAccountName: my-serviceaccount  # Replace with your ServiceAccount name
+				  volumes:
+				    - name: token-volume
+				      projected:
+				        sources:
+				          - serviceAccountToken:
+				              path: my-token   # Path within the pod where the token will be mounted
+				              expirationSeconds: 3600  # Set this to the same value you used for token expiration
+				  containers:
+				    - name: my-container
+				      image: your-image
+				      volumeMounts:
+				        - name: token-volume
+				          mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+
+
+
+						  In the above YAML:
+
+						      Replace my-serviceaccount with the name of the ServiceAccount from which you want to mount the token.
+						      Adjust the path and expirationSeconds as needed.
+						      Ensure the mountPath in volumeMounts matches the path specified in the projected volume.
+
+						      Save the Pod YAML to a file, e.g., pod-with-token.yaml.
+
+						      Apply the Pod YAML to create the pod:
+							  kubectl apply -f pod-with-token.yaml
+
+							  IMPORTANT:
+
+		This pod will be created with a volume named token-volume that contains the projected token from the specified ServiceAccount.
+		The token will be mounted at the path /var/run/secrets/kubernetes.io/serviceaccount/my-token within the pod.
+
+	   Make sure to configure your application within the pod to use this token for any Kubernetes API requests.
+	   The token will automatically be refreshed when it's close to expiration, thanks to Kubernetes' built-in token rotation mechanism.
+
+	   Ensure the mountPath in volumeMounts matches the path specified in the projected volume.
+	   Does that mean the volumes path which is my-token should be the same as the VolumeMounts /var/run/secrets/kubernetes.io/serviceaccount ???????
+
+
+	   Yes, that's correct. The `mountPath` in `volumeMounts` should match the path specified in the projected volume, which is the `path` within the `serviceAccountToken` source. In your case, both should be the same.
+
+	   In your YAML:
+
+	   ```yaml
+	   volumes:
+	     - name: token-volume
+	       projected:
+	         sources:
+	           - serviceAccountToken:
+	               path: my-token   # Path within the pod where the token will be mounted
+	   ```
+
+	   You've specified `path: my-token` in the `serviceAccountToken` source. Therefore, the corresponding `mountPath` in `volumeMounts` should be the same:
+
+	   ```yaml
+	   volumeMounts:
+	     - name: token-volume
+	       mountPath: /var/run/secrets/kubernetes.io/serviceaccount/my-token
+	   ```
+
+	   This configuration ensures that the token from the ServiceAccount is correctly mounted at the specified path within the pod,
+	   making it accessible to applications running inside the pod for authentication and Kubernetes API access.
+
+
+	   You've specified path: my-token in the serviceAccountToken source. Therefore, the corresponding mountPath in volumeMounts should be the same:
+
+	   yaml
+
+	   volumeMounts:
+	     - name: token-volume
+	       mountPath: /var/run/secrets/kubernetes.io/serviceaccount/my-token
+
+	   This configuration ensures that the token from the ServiceAccount is correctly mounted at the specified path within the pod,
+	   making it accessible to applications running inside the pod for authentication and Kubernetes API access.
+
+	   so both can be /var/run/secrets/kubernetes.io/serviceaccount/my-token ????
+
+	   Yes, both the `path` specified in the `projected` volume and the `mountPath` in `volumeMounts` can be set to `/var/run/secrets/kubernetes.io/serviceaccount/my-token`.
+	   In fact, this is a common and recommended practice when mounting a service account token.
+
+	   Here's how it should look in your YAML:
+
+	   ```yaml
+	   volumes:
+	     - name: token-volume
+	       projected:
+	         sources:
+	           - serviceAccountToken:
+	               path: /var/run/secrets/kubernetes.io/serviceaccount/my-token
+	   ```
+
+	   And in the `volumeMounts` section:
+
+	   ```yaml
+	   volumeMounts:
+	     - name: token-volume
+	       mountPath: /var/run/secrets/kubernetes.io/serviceaccount/my-token
+	   ```
+
+	   This configuration ensures consistency and clarity, making it clear that the service account token is being mounted to the standard path used for service account tokens within Kubernetes pods.
+
+
+	   ............................................................
+	   So we can then create a pod object, associate the service account and mount the token as a projected volume ???
+
+
+	   Exactly, that's the workflow. Once you've created the `TokenRequest` associated with a specific ServiceAccount, you can create a pod object, specify the ServiceAccount you want to use
+	   for that pod, and mount the token as a projected volume in the pod. Here's a step-by-step breakdown:
+
+	   1. Create a `TokenRequest` associated with a ServiceAccount as shown earlier.
+
+	   2. Create a Pod YAML that uses the ServiceAccount you want and mounts the projected token volume:
+
+	   ```yaml
+	   apiVersion: v1
+	   kind: Pod
+	   metadata:
+	     name: my-pod
+	   spec:
+	     serviceAccountName: my-serviceaccount # Use the desired ServiceAccount
+	     volumes:
+	       - name: token-volume
+	         projected:
+	           sources:
+	             - serviceAccountToken:
+	                 path: my-token # Path within the pod where the token will be mounted
+	     containers:
+	       - name: my-container
+	         image: your-image
+	         volumeMounts:
+	           - name: token-volume
+	             mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+	   ```
+
+	   3. Apply the Pod YAML using `kubectl apply -f pod.yaml`.
+
+	   With this setup, the pod will use the specified ServiceAccount, and the token from the associated `TokenRequest` will be mounted as a volume inside the pod.
+	    You can then use this token for authentication and authorization within the cluster.
+
+	   Ensure that the ServiceAccount used in the pod (`my-serviceaccount` in this example) has the necessary RBAC permissions to perform the actions you intend to use the token for.
+
+	   Refference:
+	   ----
+	   https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/#bound-service-account-token-volume
+	   https://kubernetes.io/docs/concepts/storage/projected-volumes/
+	   search token as a projected volume
+	   the default duration for a token is 3600 but you can use --duration flag to increase the time.
+
+
+	   Important:
+
+	   pods is forbidden: User "system:serviceaccount:default:default" cannot list resource "pods" in API group "" in the namespace "default"
+
+	   explain IN RBAC
+	   this is in the default namespace
+	   subjects:
+	   - kind: system:serviceaccount
+	     name: default # Name is case sensitive
+		 namespace: default
+
+
+
+
+
+	   Image Security:
+	   ==========================
+
+	   https://kubernetes.io/docs/concepts/containers/images/
+	   https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+
+	   apiVersion: v1
+	   kind: Pod
+	   metadata:
+	     name: private-reg
+	   spec:
+	     containers:
+	     - name: private-reg-container
+	       image: <your-private-image>
+	     imagePullSecrets:
+	     - name: regcred
+
+		 kubectl create secret docker-registry <name> \
+		   --docker-server=DOCKER_REGISTRY_SERVER \
+		   --docker-username=DOCKER_USER \
+		   --docker-password=DOCKER_PASSWORD \
+		   --docker-email=DOCKER_EMAIL
+
+		   OR
+
+		   kubectl create secret docker-registry regcred --docker-server=<your-registry-server> --docker-username=<your-name> --docker-password=<your-pword> --docker-email=<your-email>
+
+
+
+Pre-requisite – Security in Docker
+Configure a Security Context for a Pod or Container
+https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: security-context-demo
+spec:
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 3000
+    fsGroup: 2000
+  volumes:
+  - name: sec-ctx-vol
+    emptyDir: {}
+  containers:
+  - name: sec-ctx-demo
+    image: busybox:1.28
+    command: [ "sh", "-c", "sleep 1h" ]
+    volumeMounts:
+    - name: sec-ctx-vol
+      mountPath: /data/demo
+    securityContext:
+      allowPrivilegeEscalation: false
+
+kubectl exec -it security-context-demo-2 -- sh
+
+Important:
+By default, the process in a container runs as a root user.
+Also if you set a securitycontext of runAsUser: 0, the processes in the container also runs as a root user.
+You can also use the capabilities options to add more capability..
+
+
+
+
+Network Policies:
+
+Note that Ingress or Egress isolations comes into effect if you have Ingress or Egress in the PolicyTypes:
+If You do not specify Ingress or Egress in the policytypes there wont be any isolation of traffic.
+
+Example:
+
+We have 3 pods, a webserver serving the frontend on port 80, an api pod running on 5000 at the backend and a db pod on 3306.
+The web app pods talks to the api pod and the api pod talks to the db pod and fetches data from the DB pod and retruns it back to the user.
+Now: We want to ensure that the traffic from the enduser on 80 via the web application do not go directly to the db pod..
+
+We want a situation whereby our db pod can only accept Ingress traffic from the api pod on port 3306 only.
+
+We will use labels and selector concept..
+We will use NetworkPolicy
+
+We create a networkPolicy with policytypes Ingress..
+First we specify the podSelector and matchLabels options and add the label of the pod traffic will go to.
+The policyTypes we specify Ingress or Egress and enter the label of the pod we want traffic to come from.
+
+example:
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: db
+  policyTypes:
+  - Ingress   # Specify the policy type as Ingress.. This means you are isolating Ingress traffic, you are allowing ingress traffic only from pods that has labels app: api
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: api
+    ports:
+    - protocol: TCP
+      port: 3306
+	  Important, not all network solutions supports NetworkPolicy, this is dependent on the network solutions you are using in your cluster.
+
+	  supports networkpolicy:
+	  Romana
+	  Weave-net
+	  Calico
+	  kube router
+
+	  non support:
+	  Flannel
+	  NB: Even with a solution that does not support networkpolicy, you can still create the object, but the networkpolicy cant be enforced...
+	  Also note that youll not get an error msg saying that the solution does not not support network policy.
+
+https://kubernetes.io/docs/concepts/services-networking/network-policies/
+
+....
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: test-network-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      role: db
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 172.17.0.0/16
+            except:
+              - 172.17.1.0/24
+        - namespaceSelector:
+            matchLabels:
+              project: myproject
+        - podSelector:
+            matchLabels:
+              role: frontend
+      ports:
+        - protocol: TCP
+          port: 6379
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/24
+      ports:
+        - protocol: TCP
+          port: 5978
+
+		  ...
+
+So, the example NetworkPolicy:
+
+    isolates role=db pods in the default namespace for both ingress and egress traffic (if they weren't already isolated)
+
+    (Ingress rules) allows connections to all pods in the default namespace with the label role=db on TCP port 6379 from:
+        any pod in the default namespace with the label role=frontend
+        any pod in a namespace with the label project=myproject
+        IP addresses in the ranges 172.17.0.0–172.17.0.255 and 172.17.2.0–172.17.255.255 (ie, all of 172.17.0.0/16 except 172.17.1.0/24)
+
+    (Egress rules) allows connections from any pod in the default namespace with the label role=db to CIDR 10.0.0.0/24 on TCP port 5978
+
+	NB: The namespaceselector when used in a networkpolicy determines which namespace traffic is allowed to reach a pod...
+	When use for instance as:
+
+1. example, This uses AND operator concept. This means a pod in a namespace labled user:alice and pods with labels role:client
+    ...
+     ingress:
+     - from:
+       - namespaceSelector:
+           matchLabels:
+             user: alice
+         podSelector:
+           matchLabels:
+             role: client
+This policy contains a single from element allowing connections from Pods with the label role=client in namespaces with the label user=alice.
+...
+Yes, you are correct. The example you provided uses the AND operator concept in Kubernetes NetworkPolicy.
+
+In this example, the NetworkPolicy is specifying that it allows Ingress traffic to pods with a particular set of labels:
+
+- The Ingress rule allows traffic from pods that meet both of the following conditions:
+  1. They are in a namespace labeled `user: alice`.
+  2. They have labels with `role: client`.
+
+Both conditions must be met for traffic to be allowed. This is effectively using the AND operator, meaning that both conditions need to be true for the rule to permit traffic.
+
+So, only pods in namespaces with the label `user: alice` AND having the labels `role: client` will be allowed to send Ingress traffic according to this NetworkPolicy.
+
+
+
+
+2. example: This uses OR operator, this or that.. any one of the rules that matches works
+
+...
+ingress:
+- from:
+  - namespaceSelector:
+      matchLabels:
+        user: alice
+  - podSelector:
+      matchLabels:
+        role: client
+...
+
+It contains two elements in the from array, and allows connections from Pods in the local Namespace with the label role=client, or from any Pod in any namespace with the label user=alice.
+
+When in doubt, use kubectl describe to see how Kubernetes has interpreted the policy.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: internal-policy
+spec:
+  podSelector:
+    matchLabels:
+      name: internal
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            name: payroll
+        podSelector:
+          matchLabels:
+            name: mysql
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 3306
+
+This corrected NetworkPolicy allows egress traffic from pods labeled name: internal to pods labeled name: payroll and name: mysql on ports 8080 and 3306.
+
+
+
+
+EXTRA:
+......
+
+Kubectx and Kubens – Command line Utilities
+
+
+Throughout the course, you have had to work on several different namespaces in the practice lab environments. In some labs, you also had to switch between several contexts.
+
+While this is excellent for hands-on practice, in a real “live” kubernetes cluster implemented for production, there could be a possibility of often switching between a large number of namespaces and clusters.
+
+This can quickly become and confusing and overwhelming task if you had to rely on kubectl alone.
+
+This is where command line tools such as kubectx and kubens come in to picture.
+
+Reference: https://github.com/ahmetb/kubectx
+
+Kubectx:
+
+With this tool, you don’t have to make use of lengthy “kubectl config” commands to switch between contexts. This tool is particularly useful to switch context between clusters in a multi-cluster environment.
+
+Installation:
+
+sudo git clone https://github.com/ahmetb/kubectx /opt/kubectx
+sudo ln -s /opt/kubectx/kubectx /usr/local/bin/kubectx
+
+Syntax:
+
+To list all contexts:
+
+kubectx
+
+To switch to a new context:
+
+kubectx
+
+To switch back to the previous context:
+
+kubectx –
+
+To see the current context:
+
+kubectx -c
+
+Kubens:
+
+This tool allows users to switch between namespaces quickly with a simple command.
+
+Installation:
+
+sudo git clone https://github.com/ahmetb/kubectx /opt/kubectx
+sudo ln -s /opt/kubectx/kubens /usr/local/bin/kubens
+
+Syntax:
+
+To switch to a new namespace:
+
+kubens
+
+To switch back to previous namespace:
+
+kubens –
+
+
+alias k=kubectl
+
+
+
+
+
+
+
+Kubelet Security:
+You should disable annonymous users authentication in the kubelet service configuration file.
+This is done by setting annonymous-auth=false --> as command line parameter.
+or by setting the config file as
+authentication:
+  annonymous
+    enabled: false
+
+set the read-only-port option in the kubelet service config file or cli option to 0
+This way you have disabled the read-only option for the unauthenticated users.
+curl -sk http://localhost:10255/metrics
+You can also set the port to any number otherthan 0 which allows the read-only to that port
+By default the kubelet allows unauthenticated annonymous access on its port 10255 and and full access on 10250
+curl -sk http://localhost:10255/metrics
+curl -sk http://localhost:10250/pods
+
+Important: If you are able to access the metrics api unauthenticated this simply means that the read-only-port is not set to 0
+set authorization mode on the kubelet to webhook since it allows all authentication by default, this way it will communicate to the kube-apiserver to allow or deny
+requests to it.
+
+This curl -sk http://localhost:10255/metrics also allows the metrics server to read metrics information from the kubelet
+Ensure that kubelet is restarted after changing the authorization mode.
+
+Verify the Configuration:
+
+After making these changes, you can test the security improvements by trying to access the kubelet metrics endpoint with curl:
+
+bash
+
+    curl -sk http://localhost:10255/metrics
+
+    If the read-only port is properly disabled and authorization is set to "Webhook," you should no longer be able to access the metrics unauthenticated.
+
+These steps will help enhance the security of your Kubernetes cluster by restricting unauthenticated access to the kubelet
+service and improving overall access control and authorization. Make sure to carefully review and test these configurations
+to ensure they align with your cluster's security requirements.
+
+important: even after setting annonymous unauthenticated users to false and authorization to Webhook in the kubelet service config.
+what you did was restrict access to unauthenticated users access to the full access e.g curl -sk http://localhost:10250/pods
+When you run curl -sk http://localhost:10255/metrics with the read-only-port set to 10255, youll get a response response except the read-only-port is seet to 0 in
+the kubelet config file.
+
+    Authorization to Webhook: When you set the authorization mode to "Webhook" in the kubelet service configuration, you are enhancing the security
+    of the kubelet by making it consult the kube-apiserver for authorization decisions. This means that even though you've disabled anonymous
+    authentication (setting anonymous-auth to false), it doesn't automatically grant unauthenticated users full access to the kubelet.
+
+    Read-Only Port: You correctly mention that setting the read-only-port to 0 in the kubelet configuration file effectively disables the read-only port.
+    Without this setting (when read-only port is set to a non-zero value like 10255), unauthenticated users can still access certain read-only information,
+     like metrics, via curl.
+
+So, in summary:
+
+    Disabling anonymous authentication (anonymous-auth=false) restricts unauthenticated users from interacting with the kubelet to a certain extent.
+    Setting the read-only port to 0 (readOnlyPort: 0) in the kubelet configuration effectively blocks unauthenticated access to read-only information,
+    such as metrics, via curl.
+    Enabling authorization to "Webhook" enhances overall access control by allowing the kubelet to consult the kube-apiserver for authorization decisions,
+    ensuring that even authenticated users have proper permissions.
+
+Therefore, after setting anonymous-auth=false and authorization to "Webhook" in the kubelet service configuration, you've restricted unauthenticated users' access
+and improved overall access control in the kubelet.
+
+
+Kubectl Proxy & Port Forward
+The kubectl proxy uses the certificates and credentials from the .kube/config to access the kube-apiserver.
+Accessing the kube-apiserver directly will result in error 403 forbidden.
+eg:
+curl -k http://kube-api-server:6443
+You need to provide credentials like certificates.
+
+alternatively, provide credentials as follows
+curl -k https://kube-api-server:6443
+--cert admin.crt \
+--cacert ca.crt \
+--key admin.key
+
+with the above youll be authenticated to the kubeapi server..
+
+Also, you can avoid providing the credentials by starting the kubectl proxy client.
+e.g:
+kubectl proxy; this will start a proxy on port 8001 and use the credentials .ie cacert,key and cert from the .kube/config file to access the kube-api-server.
+When the proxy starts, run
+curl -k http://localhost:8001/api
+---
+
+ACCESS THE KUBERNETES API-KUBECTL PROXY:
+                            1. Start the kubectl proxy client by running.
+                            kubectl proxy
+                            This will start the proxy at 127.0.0.1:8001, and it will allow you to access the Kubernetes API server from your local machine
+                            This will start the kubectl proxy at 127.0.0.1:8001
+                            To list all available API versions:
+                            curl localhost:8001/apis -k
+
+                            To list the core API group:
+                            curl loalhost:8001/api -k
+More:
+curl localhost:8001/apis/networking.k8s.io/v1 -k
+To access a specific API group, you need to know the group name. For example, if you want to access the "apps" API group, which includes
+resources like Deployments and StatefulSets, you can run the following command:
+curl localhost:8001/apis/apps/v1 -k
+
+Please note that the -k flag is used to skip SSL certificate validation when using curl. This is necessary because the Kubernetes API server often uses self-signed
+certificates for local development.
+Make sure that your Kubernetes cluster is up and running, and the kubectl configuration is set to the correct context for your cluster before running these commands.
