@@ -2056,3 +2056,96 @@ curl localhost:8001/apis/apps/v1 -k
 Please note that the -k flag is used to skip SSL certificate validation when using curl. This is necessary because the Kubernetes API server often uses self-signed
 certificates for local development.
 Make sure that your Kubernetes cluster is up and running, and the kubectl configuration is set to the correct context for your cluster before running these commands.
+
+important: proxy only runs on your laptop and uses the loopback address by default.
+To access services running on your laptop say a clusterip type of an nginx:
+eg:
+pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx
+  name: nginx
+spec:
+  containers:
+  - image: nginx
+    name: nginx
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+
+service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx
+  name: nginx
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    run: nginx
+status:
+  loadBalancer: {}
+
+start the kubectl proxy client:
+kubectl proxy --> by default listens on 8001
+kubectl proxy --port=8002 --> me setting a diff port for the kubectl proxy to listen
+access the service endpoint which is the pod
+ curl http://localhost:8002/api/v1/namespaces/default/services/nginx/proxy/
+
+ Alternatively we use kubectl port-forward:
+ Forwarding a port on your laptop to a port on the service within your kubernetes cluster.
+ eg:
+ kubectl port-forward service/nginx 28080:80
+ From the above, we are forwarding port 28080 on our laptop or host to the port 80 on the service.
+ This way we can access the endpoint of the service using
+ http://localhost:28080
+ http://127.0.0.1:28080
+curl http://127.0.0.1:28080 --> youll get a response i.e from the system making the request.
+
+kubectl proxy & --> runs kubectl proxy in the backgroud with a default port
+kubectl proxy --port=8002 & --> runs kubectl proxy in the backgroud with a custom port
+press anykey to continue and test that its running on the background.
+verify by running the below command:
+jobs
+
+output:
+controlplane ~ ✦ ➜  jobs
+[1]+  Running                 kubectl proxy --port=8002 &
+
+3. fg %1
+This will bring the kubectl proxy process back to the foreground, and you can interact with it as needed. When you're done,
+you can typically use Ctrl+C to stop the kubectl proxy process,
+or you can use Ctrl+Z to suspend it and then use the bg command to run it in the background again if needed.
+
+
+IQ:
+We deployed nginx app in default namespace. Wait few seconds for pod to spinup.
+
+Forward port 8005 of localhost to port 80 of nginx pods
+
+Run port-forward process in background.
+
+Try accessing port 8005 after port forwarding.
+
+SOLUTION:
+
+
+controlplane ~ ✦ ➜  kubectl port-forward pod/nginx-cbdccf466-gfrxw 8005:80 &
+[2] 13753
+
+controlplane ~ ✦2 ➜  Forwarding from 127.0.0.1:8005 -> 80
+
+
+controlplane ~ ✦2 ➜  jobs
+[1]-  Running                 kubectl proxy --port=8002 &
+[2]+  Running                 kubectl port-forward pod/nginx-cbdccf466-gfrxw 8005:80 &
+
