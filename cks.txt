@@ -2283,7 +2283,17 @@ shasum -a 512 <filename> ---> command for macOs to verify the downloaded binarie
 
 IQ:
 Download Kubernetes source code binary for version v1.27.0 and place it in the directory -
+
+
+Reference links
+
+Below are some references:
+https://kubernetes.io/docs/setup/release/notes
+
+# They moved release notes to their own Kubernetes GitHub repository.
+https://github.com/kubernetes/kubernetes/tree/master/CHANGELOG
 https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG/CHANGELOG-1.27.md
+
 
 To extract a tar.gz or .tgz file (compressed tarball):
 tar -xzvf your_file.tar.gz
@@ -2297,3 +2307,794 @@ sha512sum archive_name.tar.gz
 
 To summarize: The shasum of a file changes when its contents are modified and should always be compared against the hash on the official pages to ensure
 the same file is downloaded.
+
+
+Kubernetes Software Versions
+
+Reference links
+
+Below are some references:
+
+https://github.com/kubernetes/kubernetes/releases
+
+https://github.com/kubernetes/design-proposals-archive/blob/main/release/versioning.md
+
+https://github.com/kubernetes/design-proposals-archive/blob/main/api-machinery/api-group.md
+
+https://blog.risingstack.com/the-history-of-kubernetes/
+
+https://kubernetes.io/docs/setup/version-skew-policy
+
+---
+
+Cluster Upgrade Process
+Cluster Maintenance:
+	 OS-Upgrade
+	 Cluster-Upgrade
+	 ETCD backup and restore.
+
+
+	 Draining:
+	 When you drain a node, the pods on that nodes and gracefully terminated and re created on another node if theyre pods of a replicaset.
+	 kubectl drain <nodename>.
+	 When you drain a node, the nodes are marked unschedulable and  cordoned.
+	 This means no pod will be scheduled on that node till you remove the restrictions.
+	 Run:
+	 kubectl uncordon node-01 to make the node available to receive pods on it, however pods running on that node b4 it was drained dont automatically fallback.
+	 only new workloads can now be scheduled on the node.
+
+	 Important:
+	 kubectl cordon node-1
+	 This command alone marks a node unchedulable and dont evict pods running in the node but drain will evict pods in a node and also cordon the node.
+
+	 Therefor drain = evict pods + cordon
+
+	 whereas cordon = marks unschedulable only.
+
+	 k drain node01 --ignore-daemonsets
+
+
+	 Important:
+	 when you try to drain a node that has a pod running on it that is not part of a replicaset or not controlled by a replication controller, youll have error till you use --force which is force:
+	 kubectl drain node01 --ignore-daemonsets
+
+	 ERROR:
+
+
+	 controlplane ~ ➜  kubectl drain node01 --ignore-daemonsets
+	 node/node01 cordoned
+	 error: unable to drain node "node01" due to error:cannot delete Pods declare no controller (use --force to override): default/hr-app, continuing command...
+	 There are pending nodes to be drained:
+	  node01
+	 cannot delete Pods declare no controller (use --force to override): default/hr-app.
+
+	 Note: This is b/c once the node is drainned that pod that is not controlled by replicaset will be deleted and not come back.
+	 so k8s impliments that restrictions and to continue you'll have to use the --force options.
+	  kubectl drain node01 --ignore-daemonsets --force
+
+
+	  Kubernetes software versions:
+
+	  K8s follows semantic versioning in releases,
+	  The major,minor and patch.
+	  Every few months, the minor version is upgraded and bug fixes are often done on the patch version.
+
+	  1  It release first goes into the alpha stages where the code has bugs and are fixed and improved, features are disbaled and buggy here---- testing and not ready for prod env.
+	  2 it goes into beta stages here the code is well tested and features are enabled by default..
+	  3 main stable--used in production env..
+
+	  Important:
+
+	  The ETCD and CoreDNS has their diff versions as theyre diff projects..
+
+
+
+	  https://kubernetes.io/docs/concepts/overview/kubernetes-api/
+
+	  Here is a link to kubernetes documentation if you want to learn more about this topic (You don’t need it for the exam though):
+
+	  https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md
+
+	  https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api_changes.md
+
+
+	  Cluster Upgrade:
+
+	  Cluster Upgrade Introduction
+
+	  K8s component versions:
+	  Non of the components should have a version higher than the kube-apiserver.
+	  If the kube-apiserver is at X V1.10
+
+	  where X is the kube-apiserver.
+
+	  The kube-controller-manager and the kube-scheduler can be at X-1 .ie V1.9 or it can be at the same version as the apiserver V1.10, it shouldnt be above it.
+
+	  The kubelet and the kube-proxy can be at X-2 or it can be at the same version as the apiserver V1.10, it shouldnt be above it.
+
+	  The kubectl client should can be at X+1 > X-1 i.e  V1.11 a version higher than the kube-apiserver or V1.10 the same version with the apiserver or V1.9 a version lower than the apiserver.
+
+	  How do we upgrade:
+	  Say k8s has version V1.10, V1.11, V1.12, V1.13.
+	  Lets assume our k8s cluster is running on V1.10 can we upgrade directly to V1.13? NO
+	  we have to first upgrade to V1.11,...V1.nth
+
+	  UPGRADE PROCESS:
+	  This is dependent on how your cluster is setup..
+	  If your cluster was created using managed services like eks,aks etc..
+	  They provide you an easy way of upgrading your cluster.
+
+	  In a kubeadm setup:
+
+	  You have to plan the upgrade:
+	  RUN:
+	  kubeadm upgrade plan
+	  kubeadm upgrade apply
+
+	  Steps:
+	  1. You upgrade the masternode once completed then,
+	  The controlplan components like the scheduler,apiserver,the node-controller-manager, go down temporarily.
+	  This does not impact your application running in the worker node however, all management functions are down, making an api call via the kubectl client wont be possible, till the apiserver is up.
+	  You cannot deploy new applications, delete or update existing ones..
+	  The controller managers wont fxn as well, if a pod where to fail, a new pod wont be created automatically...
+
+	  Important: Running kubectl get nodes command will show you that the controlplan components has been upgraded and its now time to upgrade the worker nodes....
+
+
+	  2. You upgrade the worker nodes
+
+	  There are diff strategies to upgrading the worker nodes:
+
+	  1. Upgrading all of the worker nodes at once....
+	  Using this strategy, all your pods will be down and users will no longer be able to access your application.
+	  Users will be impacted, you obviously dont want this....
+
+	  2.  Strategy 2 upgrading one node at a time...
+
+	  3 strategy 3 will be to add new nodes to the cluster:
+
+	   Add nodes with newer software versions, this approach is good if you are in a cloud env where you can commission new nodes and decommission old nodes.
+	   move the workerloads to the new nodes and decommsion old nodes..
+
+	   Practically implimenting this:
+
+	   Run:
+	   kubeadm upgrade plan
+	   This will show you the version of your kubeadm, the versions of your controlplan and worker nodes component in use.
+	   It will also show you the latest/current available stable version you can upgrade to for these individual components...
+
+	   Important:
+	   The kubeadm does not install/upgrade the kubelet, you must ssh into each worker node and install/upgrade the kubelet in each node..
+
+	   The kubeadm tool shows you the command to upgrade the cluster, when you run kubeadm upgrade plan. (kubeadm upgrade apply V1.13.4)
+
+	   B4 Proceeding to upgrade the cluster, you must first upgrade the kubeadm tool itself..
+	   The kubeadm tool follows the same k8s semantic versioning concepts.
+	   Say we are running version V1.11 and wants to upgrade to V1.12
+	   First:
+	   Upgrade the kubeadm tool itself by running.
+
+	   sudo apt-get upgrade -y kubeadm=1.12.0-00
+
+	   Then upgrade the cluster using the command from the kubeadm upgrade plan output.
+
+	   Important:
+	   Clusters deployed using kubeadm tool has kubelet running on the master nodes.
+	   Running kubectl get nodes, will show you the old version of k8s.
+	   You have to upgrade the kubelet on the master node and on worker to show the actual version of the newly upgraded k8s release.
+
+	   NB: After upgrading and it still shows you the old version of k8s do not panic, simply upgrade the kubelet by running.
+
+	   sudo apt-get upgrade -y kubelet=1.12.0-00
+	   once done restart the kubelet by running..
+
+	   sudo systemctl restart kubelet and running.. kubectl get nodes command will now show that the kubelet has been upgraded on the master or controlplan.
+	   The controlplane has been completly upgraded.
+
+	   NOW THE WORKER NODES:
+
+	   Move the workloads from one worker node to the other and upgrade the nodes individually..
+
+	   kubectl drain node-01 --ignore-daemonsets
+	   sudo apt-get upgrade -y kubeadm=1.12.0-00
+	   sudo apt-get upgrade -y kubelet=1.12.0-00
+	   kubeadm upgrade node config --kubelet-version V1.12.0 ---> This upgrades the nodes configuration for the new kubelet version.
+	   sudo systemctl restart kubelet --> restarts the kubelet
+	   kubectl uncordon node-01 -->to mark the node ready and schedulable again
+
+	   Reference:
+	   https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/
+	   https://v1-27.docs.kubernetes.io/docs/tasks/administer-cluster/kubeadm/upgrading-linux-nodes/
+
+
+
+	   Backup and Restore Methods:
+	   Backup etcd cluster:
+
+
+	   Working with ETCDCTL
+
+	   WORKING WITH ETCDCTL
+
+
+
+	   etcdctl is a command line client for etcd.
+
+
+
+	   In all our Kubernetes Hands-on labs, the ETCD key-value database is deployed as a static pod on the master. The version used is v3.
+
+	   To make use of etcdctl for tasks such as back up and restore, make sure that you set the ETCDCTL_API to 3.
+
+
+
+	   You can do this by exporting the variable ETCDCTL_API prior to using the etcdctl client. This can be done as follows:
+
+	   export ETCDCTL_API=3
+
+	   On the Master Node:
+
+
+
+	   To see all the options for a specific sub-command, make use of the -h or –help flag.
+
+
+
+	   For example, if you want to take a snapshot of etcd, use:
+
+	   etcdctl snapshot save -h and keep a note of the mandatory global options.
+
+	   Since our ETCD database is TLS-Enabled, the following options are mandatory:
+
+	   –cacert                verify certificates of TLS-enabled secure servers using this CA bundle
+
+	   –cert                    identify secure client using this TLS certificate file
+
+	   –endpoints=[127.0.0.1:2379] This is the default as ETCD is running on master node and exposed on localhost 2379.
+
+	   –key                  identify secure client using this TLS key file
+
+
+
+	   For a detailed explanation on how to make use of the etcdctl command line tool and work with the -h flags, check out the solution video for the Backup and Restore Lab.
+
+	   ---
+	   Taking a backup of your etcd cluster is a good approach to securing and making your k8s cluster and recovering it in case of disaster.
+	   Backup of the resources in your cluster can be done by querying the kube-apiserver by running
+
+	   kubectl get all --all -namespaces -o yaml > all-deploy-service.yaml
+
+	   But the above is limited to few resources..
+
+	   There are certain tools that can also help us in taking backup of the etcd cluster such as Velero formally called ARK by HepTio.
+
+	   Alternatively using the etcd client utility...
+
+	   Important: etcd data dir is the directory that will be configured by the backup tool where etcd data are stored... It is passed as option in the etcd configuration..
+	   --data-dir=/var/lib/etcd
+
+	   Taking the etcd cluster backup:
+
+	   Run:
+
+	   export ETCDCTL_API=3
+
+	   etcdctl snapshot save snapshot.db  \
+	    -–endpoints=https://127.0.0.1:2379 \
+		 --cert=/etc/kubernetes/pki/etcd/server.crt \
+		  --key=/etc/kubernetes/pki/etcd/server.key \
+		  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+
+		 Run ls to see the snapshot. If you do not want the snapshot saved in the pwd, specify a location you want it saved.
+
+		 etcdctl snapshot status <snapshotname> --> This displays the status of the snapshot.
+
+		 RESTORING ETCD CLUSTER USING THE SNAPSHOT CREATED.
+
+		 Run
+		 1. Stop the kube-apiserver b4 restoring etcd cluster using the snapshot. This is b/c the etcd cluster depends on it and will need to be restarted.
+		 You'll restart it afterwards.
+		 service kube-apiserver stop
+
+		 etcdctl snapshot restore <snapshot_name> \
+		 --data-dir /var/lib/etcd-from-backup
+
+
+		 NB:
+
+		 When restoring an etcd cluster using `etcdctl snapshot restore`, you generally do not need to specify the `--cert`, `--key`, and `--cacert` options
+		 because the etcd server is typically not running when you are performing a snapshot restore. The `--endpoints` option is also not necessary
+		 in this context because the etcd server is not running.
+
+		 Here is a simplified version of the `etcdctl snapshot restore` command:
+
+		 ```bash
+		 etcdctl snapshot restore <snapshot_name> --data-dir /var/lib/etcd-from-backup
+		 ```
+
+		 This command is usually sufficient for restoring from an etcd snapshot because the etcdctl tool should be able to locate and use the TLS configuration from the etcd configuration file (`etcd.conf`) stored in `/etc/etcd/`.
+
+		 If you have a custom etcd configuration file or if the etcdctl tool cannot locate the necessary TLS configuration, you might need to specify the TLS-related options (`--cert`, `--key`, and `--cacert`) to ensure secure communication with etcd during the restore process.
+
+		 However, in a typical disaster recovery scenario, when you are restoring from a snapshot due to cluster issues, the etcd server is not running, so specifying these TLS options is often unnecessary.
+
+		 It's essential to refer to your specific etcd setup and documentation for any unique requirements or configurations related to your cluster. Additionally, make sure to back up your TLS certificates and keys securely as part of your backup strategy.
+
+
+		 Important: When etcd restores from a backup, it initializes a new cluster configuration and configures members of etcd as new members to a new cluster,
+		  this is to prevent a new member from accidently joining an existing cluster.
+
+		  In running the above command, a new data dir is created at /var/lib/etcd-from-back.
+		  We then configure the etcd configuration file to use the new data dir..
+
+		  Finally: reload the service daemon, restart the etcd and kube-apiserver.
+		  run:
+		  sudo systemctl daemon-reload
+		  sudo service etcd restart
+		  service kube-apiserver start
+
+
+		  REF: https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/
+
+
+		  example:
+
+		 ETCDCTL_API=3 etcdctl --endpoints=https://127.0.0.1:2379 \
+		    --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+			--cert=/etc/kubernetes/pki/etcd/server.crt \
+			--key=/etc/kubernetes/pki/etcd/server.key \
+		    snapshot save /opt/cluster1.db
+
+
+		    etcdctl snapshot restore --data-dir /var/lib/etcd-from-backup
+
+
+			You dont necessarily need to restart the etcd or the kube-apiserver if it fails to restart.
+			wait for a few min for the kube-apiserver to come up after mounting the new data dir in the volume and in the other required places.
+			if it etcd pod fails to come up, delete the pod and it will be re created..
+
+
+
+			Certification Exam Tip!
+
+			Here’s a quick tip. In the exam, you won’t know if what you did is correct or not as in the practice tests in this course.
+			You must verify your work yourself. For example, if the question is to create a pod with a specific image,
+			you must run the the kubectl describe pod command to verify the pod is created with the correct name and correct image.
+
+
+
+
+			https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/#backing-up-an-etcd-cluster
+
+			https://github.com/etcd-io/website/blob/main/content/en/docs/v3.5/op-guide/recovery.md
+
+			https://www.youtube.com/watch?v=qRPNuT080Hk
+
+
+			Delete a pod stocked in terminating mode:
+
+			kubectl delete pod <pod_name> --force --grace-period=0
+
+			Important:
+			Once you mounth the --data-dir for the etcd cluster, save and wait for the pods to come up both the kube-api..
+			You can delete the etcd pod and it will be re created...
+
+
+			.......
+			Practice Test Backup and Restore Methods 2
+
+			kubectl config  get-clusters -->Display clusters defined in the kubeconfig
+			kubectl config  -h
+			 kubectl config current-context --> Display the current-context
+
+			 kubectl config use-context cluster2 --> Set the current-context in a kubeconfig file
+
+
+			 What is the default data directory used in the ETCD datastore used in cluster1?
+			 Remember, this cluster uses a Stacked ETCD topology.
+			 Meaning runs in a pod..
+
+			 1. How many nodes are part of the ETCD cluster that the etcd-server is a part of???
+
+			 Answer:
+
+			 ETCDCTL_API=3 etcdctl \
+			 --endpoints=https://127.0.0.1:2379 \
+			 		    --cacert=<enter the path to the CA cert of the etcd> \
+			 			--cert=<enter the path to the server cert of the etcd> \
+			 			--key=<enter the path to the key file of the etcd> \
+						member list
+
+						This will list the members of the etcd..
+
+						IMPORTANT:
+						COPY FROM ONE SERVER TO ANOTHER.
+						YOU HAVE TO BE IN THE DESTINATION SERVER.
+						1. Take a backup in the specified context, move back to the student node and run an scp command frm there..
+						2. When you want to restore, you copy the back from the student node to the context u want to restore and ssh to the context and run the restore..
+
+						scp cluster1-controlplane:/opt/snapshot.db /opt
+						or
+						to copy from pwd to another server
+
+						scp /opt/snapshot.db     etcd-server:/root
+						locationofsnapshot            <destination-server/node>:<path to save it>
+
+						Secure copy from where or which server cluster1-controlplane
+						from what source or path to the file? :/opt/snapshot.db
+						to what destination? /opt
+
+						IMPORTANT:
+						2. How does the api-server communicate with the etcd?
+						It uses the etcd server url https://127.0.0.1:2379 in a stacked etcd but for external etcd, the ip will change, it will be the ip of the external etcd server.
+
+						Important:
+						Youll always save snapshot in a safe location, so if workloads goes down in a specific server, you scp the snapshot to the server and restore the server using the backup file.
+
+
+
+Network Policies:
+
+Note that Ingress or Egress isolations comes into effect if you have Ingress or Egress in the PolicyTypes:
+If You do not specify Ingress or Egress in the policytypes there wont be any isolation of traffic.
+
+Example:
+
+We have 3 pods, a webserver serving the frontend on port 80, an api pod running on 5000 at the backend and a db pod on 3306.
+The web app pods talks to the api pod and the api pod talks to the db pod and fetches data from the DB pod and retruns it back to the user.
+Now: We want to ensure that the traffic from the enduser on 80 via the web application do not go directly to the db pod..
+
+We want a situation whereby our db pod can only accept Ingress traffic from the api pod on port 3306 only.
+
+We will use labels and selector concept..
+We will use NetworkPolicy
+
+We create a networkPolicy with policytypes Ingress..
+First we specify the podSelector and matchLabels options and add the label of the pod traffic will go to.
+The policyTypes we specify Ingress or Egress and enter the label of the pod we want traffic to come from.
+
+example:
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: db
+  policyTypes:
+  - Ingress   # Specify the policy type as Ingress.. This means you are isolating Ingress traffic, you are allowing ingress traffic only from pods that has labels app: api
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: api
+    ports:
+    - protocol: TCP
+      port: 3306
+	  Important, not all network solutions supports NetworkPolicy, this is dependent on the network solutions you are using in your cluster.
+
+	  supports networkpolicy:
+	  Romana
+	  Weave-net
+	  Calico
+	  kube router
+
+	  non support:
+	  Flannel
+	  NB: Even with a solution that does not support networkpolicy, you can still create the object, but the networkpolicy cant be enforced...
+	  Also note that youll not get an error msg saying that the solution does not not support network policy.
+
+https://kubernetes.io/docs/concepts/services-networking/network-policies/
+
+....
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: test-network-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      role: db
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 172.17.0.0/16
+            except:
+              - 172.17.1.0/24
+        - namespaceSelector:
+            matchLabels:
+              project: myproject
+        - podSelector:
+            matchLabels:
+              role: frontend
+      ports:
+        - protocol: TCP
+          port: 6379
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/24
+      ports:
+        - protocol: TCP
+          port: 5978
+
+		  ...
+
+So, the example NetworkPolicy:
+
+    isolates role=db pods in the default namespace for both ingress and egress traffic (if they weren't already isolated)
+
+    (Ingress rules) allows connections to all pods in the default namespace with the label role=db on TCP port 6379 from:
+        any pod in the default namespace with the label role=frontend
+        any pod in a namespace with the label project=myproject
+        IP addresses in the ranges 172.17.0.0–172.17.0.255 and 172.17.2.0–172.17.255.255 (ie, all of 172.17.0.0/16 except 172.17.1.0/24)
+
+    (Egress rules) allows connections from any pod in the default namespace with the label role=db to CIDR 10.0.0.0/24 on TCP port 5978
+
+	NB: The namespaceselector when used in a networkpolicy determines which namespace traffic is allowed to reach a pod...
+	When use for instance as:
+
+1. example, This uses AND operator concept. This means a pod in a namespace labled user:alice and pods with labels role:client
+    ...
+     ingress:
+     - from:
+       - namespaceSelector:
+           matchLabels:
+             user: alice
+         podSelector:
+           matchLabels:
+             role: client
+This policy contains a single from element allowing connections from Pods with the label role=client in namespaces with the label user=alice.
+...
+Yes, you are correct. The example you provided uses the AND operator concept in Kubernetes NetworkPolicy.
+
+In this example, the NetworkPolicy is specifying that it allows Ingress traffic to pods with a particular set of labels:
+
+- The Ingress rule allows traffic from pods that meet both of the following conditions:
+  1. They are in a namespace labeled `user: alice`.
+  2. They have labels with `role: client`.
+
+Both conditions must be met for traffic to be allowed. This is effectively using the AND operator, meaning that both conditions need to be true for the rule to permit traffic.
+
+So, only pods in namespaces with the label `user: alice` AND having the labels `role: client` will be allowed to send Ingress traffic according to this NetworkPolicy.
+
+
+
+
+2. example: This uses OR operator, this or that.. any one of the rules that matches works
+
+...
+ingress:
+- from:
+  - namespaceSelector:
+      matchLabels:
+        user: alice
+  - podSelector:
+      matchLabels:
+        role: client
+...
+
+It contains two elements in the from array, and allows connections from Pods in the local Namespace with the label role=client, or from any Pod in any namespace with the label user=alice.
+
+When in doubt, use kubectl describe to see how Kubernetes has interpreted the policy.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: internal-policy
+spec:
+  podSelector:
+    matchLabels:
+      name: internal
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            name: payroll
+        podSelector:
+          matchLabels:
+            name: mysql
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 3306
+
+This corrected NetworkPolicy allows egress traffic from pods labeled name: internal to pods labeled name: payroll and name: mysql on ports 8080 and 3306.
+
+
+Ingress:::
+
+ Ingress helps your users access your application using a single externally accessible url that you can configure to route traffic to diff services within your cluster
+ based on the url path, the same time impliment ssl security as well..
+ Think of ingress as a layer 7 load balancer built into the kubernetes cluster and can be configured using basic k8s primitives just like any other object that we have been working with in k8s.
+ NOTE: Even with ingress, you still need to expose it to make it accessible to the cluster.. Either as a nodeport or cloud native lB.
+
+
+ HOW DOES IT WORK? WHAT IS IT? WHERE IS IT?
+ HOW CAN YOU CONFIGURE IT AND HOW DOES IT LOADBALANCE?
+ HOW DOES IT IMPLIMENT SSL?
+
+ WITHOUT INGRESS, HOW WOULD YOU DO ALL OF THIS?
+ I WILL USE A REVERSE PROXY LIKE NGINX, HAPROXY, TRAEFIK.
+ i will deploy them on my k8s cluster and configure them to route traffic to other services..
+
+ Implimenting Ingress:
+ 1. Use any of the above listed solutions like HAPROXY,TRAEFIK OR NGINX,CONTOUR,ISTIO, GCP HTTPS GCE LB.
+ 2. THE SOLUTION YOU DEPLOY IS CALLED INGRESS CONTROLLER
+ 3. THE SET OF RULES YOU CONFIGURE IS CALLED INGRESS RESOURCES
+ Ingress resources are created using definition files.
+
+ The k8s cluster does not come with Ingress controller deployed in it by default.
+ If you create ingress resources and expect them to work, they wont...
+
+ We deploy the ingress controller using nginx solution.
+ HTTPS GCE LB and NGINX ingress are supported by the k8s project.
+
+ This ingress controllers are not just another LB, the loadbalancer are built inside of it.
+ The ingress controller has an additional inteligence built in it to monitor the kubernetes cluster
+ for new resources and definitions and configure the nginx server accordingly....
+
+ The ingress controller is deployed as a deployment.
+ You create a deployment file for it specifying the right image version..
+ The nginx program is stored at
+ /nginx-ingress-controller
+
+ 1. deployment
+ 2. svc to expose the deployment
+ 3. cm to load the config data
+ 4. sa act for auth --> b/c the ingress controller has add inteligence
+ 5. role and rolebinding
+
+
+ INGRESS RESOURCES:
+ This are set of rules applied on the ingress controller..
+ 1. A rule that says forward an incoming traffic to a single application...
+ 2. route traffic to diff aps based on the url
+ 3. route traffic based on path or host based routing...
+
+ REF:
+ https://kubernetes.io/docs/concepts/services-networking/ingress/
+
+ IMPORTANT:
+
+ Article: Ingress
+
+ As we already discussed Ingress in our previous lecture. Here is an update.
+
+ In this article, we will see what changes have been made in previous and current versions in Ingress.
+
+ Like in apiVersion, serviceName and servicePort etc.
+
+
+
+ Now, in k8s version 1.20+ we can create an Ingress resource from the imperative way like this:-
+
+ Format - kubectl create ingress <ingress-name> --rule="host/path=service:port"
+
+ Example - kubectl create ingress ingress-test --rule="wear.my-online-store.com/wear*=wear-service:80"
+
+ Find more information and examples in the below reference link:-
+
+ https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands#-em-ingress-em-
+
+ References:-
+
+ https://kubernetes.io/docs/concepts/services-networking/ingress
+
+ https://kubernetes.io/docs/concepts/services-networking/ingress/#path-types
+
+
+ Path types
+
+ Each path in an Ingress is required to have a corresponding path type.
+ Paths that do not include an explicit pathType will fail validation. There are three supported path types:
+
+     ImplementationSpecific: With this path type, matching is up to the IngressClass.
+	 Implementations can treat this as a separate pathType or treat it identically to Prefix or Exact path types.
+
+     Exact: Matches the URL path exactly and with case sensitivity.
+
+     Prefix: Matches based on a URL path prefix split by /. Matching is case sensitive and done on a path element by element basis.
+	  A path element refers to the list of labels in the path split by the / separator.
+	  A request is a match for path p if every p is an element-wise prefix of p of the request path.
+
+
+
+
+Ingress – Annotations and rewrite-target
+
+Different ingress controllers have different options that can be used to customise the way it works.
+ NGINX Ingress controller has many options that can be seen here. I would like to explain one such option that we will use in our labs. The Rewrite target option.
+
+
+
+Our watch app displays the video streaming webpage at http://<watch-service>:<port>/
+
+Our wear app displays the apparel webpage at http://<wear-service>:<port>/
+
+We must configure Ingress to achieve the below. When user visits the URL on the left, his/her request should be forwarded internally to the URL on the right. Note that the /watch and /wear URL path are what we configure on the ingress controller so we can forward users to the appropriate application in the backend. The applications don’t have this URL/Path configured on them:
+
+
+
+http://<ingress-service>:<ingress-port>/watch –> http://<watch-service>:<port>/
+
+http://<ingress-service>:<ingress-port>/wear –> http://<wear-service>:<port>/
+
+
+
+Without the rewrite-target option, this is what would happen:
+
+http://<ingress-service>:<ingress-port>/watch –> http://<watch-service>:<port>/watch
+
+http://<ingress-service>:<ingress-port>/wear –> http://<wear-service>:<port>/wear
+
+
+
+Notice watch and wear at the end of the target URLs. The target applications are not configured with /watch or /wear paths. They are different applications
+ built specifically for their purpose, so they don’t expect /watch or /wear in the URLs. And as such the requests would fail and throw a 404 not found error.
+
+
+
+To fix that we want to “ReWrite” the URL when the request is passed on to the watch or wear applications.
+We don’t want to pass in the same path that user typed in. So we specify the rewrite-target option.
+This rewrites the URL by replacing whatever is under rules->http->paths->path which happens to be
+ /pay in this case with the value in rewrite-target. This works just like a search and replace function.
+
+For example: replace(path, rewrite-target)
+
+In our case: replace("/path","/")
+
+
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: test-ingress
+  namespace: critical-space
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /pay
+        backend:
+          serviceName: pay-service
+          servicePort: 8282
+
+
+
+In another example given here, this could also be:
+
+replace("/something(/|$)(.*)", "/$2")
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  name: rewrite
+  namespace: default
+spec:
+  rules:
+  - host: rewrite.bar.com
+    http:
+      paths:
+      - backend:
+          serviceName: http-svc
+          servicePort: 80
+        path: /something(/|$)(.*)
+
+		IMPORTANT: IT IS THE PORT OF THE SERVICE WE ARE SPECIFYING AS THE BACK END PORT.
+
+
