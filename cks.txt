@@ -3098,3 +3098,116 @@ spec:
 		IMPORTANT: IT IS THE PORT OF THE SERVICE WE ARE SPECIFYING AS THE BACK END PORT.
 
 
+Docker Service Configuration
+To start the docker service we use:
+systemctl start docker
+systemctl stop docker
+systemctl status docker
+Configuring docker as a service helps run the docker daemon as a service, this helps to automatically start the service when the system boots up.
+Run the docker daemon at the foreground by ruuning.
+dockerd or dockerd --debug , this is good for troubleshoot purposes
+When the docker daemon starts, it listens on an internal unix socket at the path /var/run/docker.sock.
+This can also be seen in the output of the logs from the command dockerd --debug
+
+Important: a unix socket is an ipc or intercommunication mechanism that is used for communication between diff processes on the same host.
+This means the docker cli is configured to talk to the docker daemon on the socket and on the same host.
+
+What if we need to establish communication to the docker daemon from outside the host?
+say we have another server with docker cli installed in it and we want to target the docker daemon on another host to run containers?
+From my laptop, i want to run a docker command to target a specific host,
+the way things are, the docker daemon is not configured to list from outside host, it only listens to the unix socket /var/run/docker.sock on it host.
+However, we can make the docker daemon listen to a tcp socket on the docker host by running or passing the host option while starting the docker service.
+
+dockerd --debug --host=tcp://<ip>:2375
+where the ip is the interface of the docker host, and 2375 is the standard port for docker.
+
+With the above settings, you'll be able to access the docker daemon from outside the host and get it to listen and run containers from outside of the host.
+How can i from the other host target the docker daemon on the other host and run containers
+
+steps:
+1. export DOCKER_HOST="tcp://<ip>:2375"
+docker ps
+viola we are good, now you can run container on the host. Be sure this is what you want b/c anyone on the internet can target your docker host and run containers on the host.
+By default the docker api serves unencrypted traffic..
+
+To encrypt the communication, you must create a pair of tls certificate and key and set tls option to true as shown
+
+export DOCKER_HOST="tcp://<ip>:2376"
+dockerd --debug --tls=true \
+--host=$DOCKER_HOST \
+--tlscert=/var/run/docker/server.pem \
+--tlskey=/var/run/docker/serverkey.pem
+
+docker ps --debug \
+ --tls=true \
+--host=$DOCKER_HOST \
+--tlscert=/var/run/docker/server.pem \
+--tlskey=/var/run/docker/serverkey.pem
+where /var/run/docker/serverkey.pem is the path to the certificate and key
+
+Important:
+the docker port 2375 --> for unencrypted traffic and 2376 is for encrypted traffic..
+
+The above options can be moved to a configuration file called, docker daemon configuration file.
+The file is in a json format into the directory /etc/docker/daemon.json
+
+{
+"debug": true,
+"tls": true,
+hosts: ["tcp://<ip>:2376"]
+"tlscert": "/var/run/docker/server.pem",
+"tlskey": "/var/run/docker/serverkey.pem"
+
+}
+This configuration is on the client server and host. On the host move the configuration file into the /etc/docker/daemon.json and on the remote client server
+export the values as an env variables in the current shell e.g
+export DOCKER_HOST="tcp://<ip>:2376"
+export DOCKER_TLS_VERIFY="1"
+export DOCKER_CERT_PATH="/path/to/tls"
+export DEBUG=true
+
+Run docker ps
+When you have configured the necessary environment variables like DOCKER_HOST, DOCKER_TLS_VERIFY, and DOCKER_CERT_PATH in your shell session,
+running docker ps or any other Docker command will use these settings to communicate with the remote Docker host that you've specified in DOCKER_HOST.
+
+So, after setting the environment variables and running docker ps, Docker will query the remote Docker host,
+and you will see information about the containers running on the remote host displayed in your terminal.
+
+
+Note: If you specify an option in the cli and in the daemon.json file, the docker daemon will through an error saying that theres a configuration file..
+ex:
+dockerd --debug=false > This error is cuz you set debug to true in the json file and fasle on the cli.
+This config are valid when we run systemctl start docker, the config are read and implimented.
+
+Generate the certificate and key to configure tls for the docker daemon.
+o generate TLS key and certificate files for securing Docker communication,
+you can use the openssl command-line tool. Here are the commands to generate a self-signed TLS certificate and key:
+
+    Generate a private key:
+
+    bash
+
+openssl genpkey -algorithm RSA -out serverkey.pem
+
+Generate a certificate signing request (CSR):
+
+bash
+
+openssl req -new -key serverkey.pem -out server.csr
+
+Generate a self-signed certificate using the CSR:
+
+bash
+
+    openssl x509 -req -days 365 -in server.csr -signkey serverkey.pem -out server.pem
+
+These commands will create two files:
+
+    serverkey.pem: This is the private key file.
+    server.pem: This is the self-signed certificate file.
+
+You can then use these files for configuring Docker to use TLS for secure communication.
+Make sure to place these files in a secure location, and consider protecting the private
+key with proper permissions since it's a sensitive component of the TLS setup.
+
+
