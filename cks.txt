@@ -2268,3 +2268,32 @@ RoleBinding name: dashboard-admin-binding
 
 ClusterRoleBinding name: dashboard-admin-list-namespace-binding
 ---
+
+
+Verify platform binaries before deploying
+Verifying kubernetes binaries before deploying kubernetes. It is important to verify the platform binary against the checksum hash found in the documentation.
+It is possible that an attacker has gained access to your network and intercepts your download requests and returns or inject malicious code to the download.
+Once you download files, say kubernetes binaries, the k8s documentation has shasum hash code that can be used to verify the downloaded binaries againts what is on the
+kubernetes platform.
+
+ex:
+run a curl command to download your required binaries
+run the sha512sum <filename> command to verify the downloaded binaries. --> linux
+shasum -a 512 <filename> ---> command for macOs to verify the downloaded binaries against the kubernetes platform binaries
+
+IQ:
+Download Kubernetes source code binary for version v1.27.0 and place it in the directory -
+https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG/CHANGELOG-1.27.md
+
+To extract a tar.gz or .tgz file (compressed tarball):
+tar -xzvf your_file.tar.gz
+
+To create a tar.gz (compressed tarball) archive:
+bash
+tar -czvf archive_name.tar.gz file_or_directory
+
+validate download
+sha512sum archive_name.tar.gz
+
+To summarize: The shasum of a file changes when its contents are modified and should always be compared against the hash on the official pages to ensure
+the same file is downloaded.
