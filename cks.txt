@@ -3156,13 +3156,14 @@ The file is in a json format into the directory /etc/docker/daemon.json
 "tls": true,
 hosts: ["tcp://<ip>:2376"]
 "tlscert": "/var/run/docker/server.pem",
-"tlskey": "/var/run/docker/serverkey.pem"
+"tlskey": "/var/run/docker/serverkey.pem",
+"tlsverify": true
 
 }
 This configuration is on the client server and host. On the host move the configuration file into the /etc/docker/daemon.json and on the remote client server
 export the values as an env variables in the current shell e.g
 export DOCKER_HOST="tcp://<ip>:2376"
-export DOCKER_TLS_VERIFY="1"
+export DOCKER_TLS_VERIFY="true"
 export DOCKER_CERT_PATH="/path/to/tls"
 export DEBUG=true
 
@@ -3174,13 +3175,13 @@ So, after setting the environment variables and running docker ps, Docker will q
 and you will see information about the containers running on the remote host displayed in your terminal.
 
 
-Note: If you specify an option in the cli and in the daemon.json file, the docker daemon will through an error saying that theres a configuration file..
+Note: If you specify an option in the cli and in the daemon.json file, the docker daemon will trow an error saying that theres a configuration file..
 ex:
 dockerd --debug=false > This error is cuz you set debug to true in the json file and fasle on the cli.
 This config are valid when we run systemctl start docker, the config are read and implimented.
 
 Generate the certificate and key to configure tls for the docker daemon.
-o generate TLS key and certificate files for securing Docker communication,
+to generate TLS key and certificate files for securing Docker communication,
 you can use the openssl command-line tool. Here are the commands to generate a self-signed TLS certificate and key:
 
     Generate a private key:
@@ -3210,4 +3211,309 @@ You can then use these files for configuring Docker to use TLS for secure commun
 Make sure to place these files in a secure location, and consider protecting the private
 key with proper permissions since it's a sensitive component of the TLS setup.
 
+Important: Use the ca root certificate to create a clientcert and clientkey for the client remote server to be able to communicate with the docker daemon.
+This certificate can be passed as an env variable or as an option while running the docker command.
+They can also be placed in the users home directory in ~/.docker in the users home directory and docker will pick it up from there when a command is executed.
+ex:
+docker ps
+
+
+
+Docker – Securing the Daemon
+What will happen when an unauthrized persons gains access to the docker daemon?
+Anyone with access to the docker daemon can host a containerized application for bit coin mining purposes, delete containers, check logs and access volumes and delete them which will impact your users
+and this will result in data loss.
+They can run priviledge container and gain access to entire infrastructure.
+
+The first line of defense is the docker host.
+We secure the server hosting the docker daemon.
+1. disable password based authentication
+2. enable ssh based authentication
+3. Determine users who needs access to the server
+4. disable unused ports
+5. Configuring external access to the docker daemon for integration purpose or for a user to run commands on the host and perform their tasks.
+Ensure the if you need to expose the docker daemon externally you do this using the private interfaces that are only accessible from within your org
+and not the public interface of the host.
+6. create and use tls certificates and key for the communication store this in the docker host at the /var/run/docker directory.
+7. set the tlsverify option to true in the daemon.json configuration file so any communication from the client will be verified.
+With this only clients with signed certificate can access the docker daemon.
+Important: The tls=true option alone does not enable authentication it only enables encryptions anyone with tls option set to true will still be able to access the docker daemon.
+It is the tlsverify:true option that enables authentication
+
+
+Summary without authentication but tls
+{
+"tls": true,
+hosts: ["tcp://<ip>:2376"]
+"tlscert": "/var/run/docker/server.pem",
+"tlskey": "/var/run/docker/serverkey.pem"
+
+}
+
+summary with authentication and tls
+{
+"tls": true,
+hosts: ["tcp://<ip>:2376"]
+"tlscert": "/var/run/docker/server.pem",
+"tlskey": "/var/run/docker/serverkey.pem",
+"tlsverify": true   --> added
+
+}
+
+verify on client side.
+docker --tls ps
+
+---
+
+Securing Control Plane Communications with Ciphers
+
+As we have already covered in previous lectures, communication between clients and API server, and also between the Kubernetes components is by way of Mutual TLS (mTLS). TLS works by use of Public Key Encryption, and the encryption is performed by cryptographic mathematical algorithms known as ciphers. Mathematicians discover new ciphers from time to time that are more secure than their predecessors.
+
+Each time a new cipher is discovered, it has to work its way into general usage, that is, that the software libraries that implement encryption need to be updated with the new cipher, whilst remaining compatible with the existing well-known ciphers. These updates have to find their way into all software that makes use of HTTPS (TLS) protocols including, but not limited to
+
+    Browsers
+    Web clients (e.g. curl, wget)
+    Web servers (e.g. IIS, nginx, apache etc)
+    Layer 7 appliances (e.g. AWS Application Load Balancer, Web Application Firewalls)
+    Kubernetes components (API server, controller manager, kubelet, scheduler)
+    etcd
+
+When a TLS connection is established, the cipher to use is negotiated between the two ends, and usually the strongest possible cipher that
+both ends know is selected. The ciphers available to each end of the connection depend on how old that software is, and thus which ciphers are known to it.
+
+Most TLS aware software packages, and for the purpose of CKS, this includes all the control plane components and etcd, have the ability to
+limit which ciphers should be available for negotiation when a connection is being established. Limiting the available ciphers to the newer
+(stronger) ones prevents older clients that do not have the newer ciphers from establishing a connection which may be able to be compromised
+due to use of an older (weaker) cipher for which a known exploit is available.
+Ciphers and the Kubernetes Control Plane
+
+All the control plane components (API server, controller manager, kubelet, scheduler) have the following two optional arguments:
+
+    --tls-min-version – This argument sets the minimum version of TLS that may be used during connection negotiation. Possible values:
+    VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13, for TLS 1.0 thru TLS 1.3 respectively. The default is VersionTLS10.
+    --tls-cipher-suites – This argument sets a comma-separated list of cipher suites that may be used during connection negotiation.
+    There are many of these, and the full list may be found on the api server argument page. If this argument is omitted, the default
+     value is the list provided by the GoLang cipher suites package.
+
+etcd also has a command line argument to set cipher suites. Thus it is possible to secure api server → etcd communication to use only
+specific ciphers that they have in common. You would most likely want to select the newest/strongest.
+
+    --cipher-suites – This argument sets a comma-separated list of cipher suites that may be used during connection negotiation.
+    If this argument is omitted, the default value is the list provided by the GoLang cipher suites package.
+
+Be aware that not all combinations of cipher suites and TLS versions are compatible with each other. If you set --tls-min-version
+to VersionTLS13, there will be certain ciphers that can’t be used so explicitly specifying an incompatible cipher with --tls-cipher-suites would
+cause API server to not come back up.
+
+Should you encounter an exam question relating to ciphers, you will be told which one(s) to use by the question.
+Example
+
+Restrict communication between etcd and api server to the cipher TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 and also restrict the api server minimum TLS version to TLS 1.2
+
+    Edit the API server manifest and add the following two arguments
+
+    --tls-min-version=VersionTLS12
+    --tls-cipher-suites=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+
+    Edit the etcd manifest and add the following argument
+
+    --cipher-suites=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+
+    Wait for both pods to restart. This may take a minute or more.
+
+If for some reason one or both pods don’t come back up, you should diagnose the cause like this.
+REF: https://github.com/kodekloudhub/community-faq/blob/main/docs/diagnose-crashed-apiserver.md
+https://github.com/kodekloudhub/community-faq/blob/main/docs/yaml-faq.md#dealing-with-errors
+https://us02web.zoom.us/rec/play/AsCKDatkmNOp1TUNh1-TbTUfbD71rPEdh3OF3hY1BHtJrqstGnumfIEG9xrja127q0QGSTagZXSwdHLJ.pylvKhyY-BIDtbAZ?canPlayFromShare=true&from=share_recording_detail&continueMode=true&componentName=rec-play&originRequestUrl=https%3A%2F%2Fus02web.zoom.us%2Frec%2Fshare%2F9arsF4_YOEli7xKa9DsXpqrciqz2drNHbyzX4LoFlP3r1o0ieQ_K4SnamLZOU4Q.Z-LKaVLEbNhKRocT
+https://github.com/kodekloudhub/cka-debugging-api-server
+
+
+System Hardening
+Least Privilege Principle:
+1. limit access to the nodes --> rbac
+2. remove obsolete packages and services: uninstall unwanted packages and install only required packages and services
+3. restrct network access: certain port shouldnt be allowed open.
+4. restrict obsolete kernel modules: certain kernel modules shouldnt be allowed to load in the system
+5. identify and fix open ports
+
+
+Minimize host OS footprint Intro
+we use the principles of the least priviledge discussed above to reduce the attack Surface in an os.
+
+Limit Node Access: reducing the attack surface by limiting access to the host.
+limit the exposure of the controlplane and the worker nodes to the internet.
+provisiong the cluster in a private network
+using vpn to access the cluster
+enable access to the node from a certain ip range by setting this in the firewall of the infrastructure
+who needs access to the nodes of your cluster?
+1. system admins --> only allow access the node only to required users.
+
+Managing account in linux.
+
+1. user account: This includes the developers such as john, mike etc
+2. superuser account: This is the root account and with the uid of 0. The superuser has full and unrestricted access to the system including other users.
+3. system accounts: This is created during the os installations. This are for the softwares and services that will not run as superuser.
+e.g ssh, mail
+4. serviceaccount: This is similar to system account, this are created when packages and services  are installed in linux.
+e.g nginx,httpd that makes use of servceaccount called nginx
+
+run id --> get information about users and the groups they belong to in linux.
+who --> users logged in the system.
+last --> list the last time users where logged in to the system
+
+Access control files:
+The access control files are all store in the /etc directory.
+1. /etc/shadow --> holds the password files for the users
+2. /etc/passwd --> holds the user names,uid,gid and their shell
+3. /etc/group  --> holds the group details of the users.
+
+Disable irrelivant useraccounts.
+run:
+1. usermod -s /bin/nologin john --> This sets the shell to nologin, this way the user will not be able to login to the host.
+verify
+grep -i john /etc/passwd --> You will see that the shell has changed to nologin.
+2. userdel bob --> this will delete the user bob
+userdel -r bob --> deletes the user bob and his home diretory.
+
+Remove users from groups:
+run deluser john <group>
+id john --> This will show you johns information.
+
+sudo usermod -a -G groupname username --> add user to group
+
+
+SSH Hardening:
+Improving the security of our nodes by securing ssh access to the node.
+to login via ssh run
+ssh <hostname or ip address>
+ssh user@hostname or ip address
+ssh -i user@hostname or ip
+
+For secure access,
+1. Generate a keypair using the ssh-keygen -t rsa command
+2. run the ssh-copy-id user@hostname or ip  --> This will prompt for password, enter it and the public key will be copied to the server at
+~/.ssh/authrorizedk_eys dir
+note ssh-copy-id is a command that exists by default.
+
+3. Once successfully copied Harden ssh service.
+1. Disable ssh root account, this ensures no one is able to login with root act but only with their act. vi /etc/ssh/sshd_config
+set the PermitRootLogin no
+set PasswordAuthentication no --> This ensures the access to the server is only via cryptographic ssh keys.
+sudo systemctl restart sshd
+
+Refer to the cis benchmark guide of section 5.2 for me info..
+
+
+Privilege Escalation in Linux
+There is a time we would require root previlege to run some commands like installing packages and restaring system services etc.
+The best way to do this is by using sudo.
+run visudo and access the sudoers file and grant permission to users and groups as required..
+The administrator does all of these remember...
+
+allow a user to reboot the system.
+sarah localhost=/usr/bin/shutdown -r now
+Note: commands executed with sudo are executed in the user shell and not in the root shell
+Set the root user shell to no login
+
+usermod -s /usr/sbin/nologin root --> This automatically disables the use of root user to login to the server.
+
+ALL=(ALL:ALL) ALL
+The values ALL in the sudoers file refers to localhost i.e the first ALL
+(ALL:ALL) --> Refers to users and groups
+The last ALL --> Means any user can run any command without restrictions, this can be replaced with the command you want the specific user to run..
+
+IQ:
+We want to update user jim on node01 host so that jim can run sudo commands without entering the sudo password. Please make appropriate changes.
+
+    On node01 host, open /etc/sudoers file using any editor like vi and edit entry for user jim and forcefully save the file.
+
+Change jim    ALL=(ALL:ALL) ALL
+
+To jim  ALL=(ALL) NOPASSWD:ALL --> makes user jim not require password to run sudo command.
+
+IQ:
+
+    On node01 host open /etc/ssh/sshd_config config file using any editor like vi and make appropriate changes
+
+Change: #PermitRootLogin prohibit-password
+
+To: PermitRootLogin no
+
+Change: #PasswordAuthentication yes
+
+To: PasswordAuthentication no
+
+    Restart sshd service by using command:
+
+service sshd restart
+
+
+Remove Obsolete Packages and Services:
+say for example, you find out that apache is installed in your kubernetes cluster.
+IQ: Is apache really needed on the node of your kubernetes cluster? the answer is no..
+It increases the load on the system and that more moving parts needs to be maintained constantly..
+new vulnerability are discovered always, it is more than needed to update your packages all the time....
+
+Services:
+Services are used by some applications in the linux system boots..
+ex:
+bios, boot loader (GRUB2), Kernel initialization, Init Process (systemd)
+To get the list of services in the system:
+systemctl list-units --type service
+if a service is not needed, stop and disable the service.
+ex:
+systemctl stop <servicename>
+systemctl disable <servicename>
+to remove a package
+apt remove <packagename>
+apt remove apache
+Refer to cis benchmark on service and follow the guide.
+Go to the `Operating Systems` section and search for the `Distribution Independent Linux`. Expand it to see more options then download CIS Benchmark.
+
+
+Restrict Kernel Modules
+The linux kernel module has a modular design, this allows the kernel to expand its capabilities by the use of dynamically loaded kernel module.
+This means a new hardware is connect to the linux computer and then be made available to the users by loading the corresponding module.
+modules can be loaded manually to the kernel by using...
+modprobe pcspkr --> load module called pcspkr to the kernel
+lsmod --> list loaded modules to the kernel.
+Important, say we have k8s workload running on the said host and an unpriviledge process running in a pod can cause certain network relate protocol module to be
+loaded to the kernel by creating a network socket, this can allow an attacker to exploit a known vulnerability.
+
+Restrict kernel module:
+To avoid the describe scenario above, it is a best practice to blacklist all kernel module in all the nodes of the cluster.
+This will prevent the kernel module from loading..
+sctp kernel module is not used in k8s.. we balcklist it as follows.
+/etc/modprobe.d/blacklist.conf
+NB: Just create the blacklist.conf file in the /etc/modprobe.d/ directory, This way you have successfully blacklisted the sctp kernel module from loading
+2. reboot the node shutdown -r now
+3. check if the sctp kernel module is listed as part of the kernels in the host by running..
+lsmod
+lsmod | grep -i sctp
+4. another module that shouldnt exist in k8s and need to be blacklisted is the dccp kernel module.
+follow the same step and add <dccp> into the /etc/modprobe.d/blacklist.conf file and run shutdown -r now to restart the system.
+verify if it blacklisted by ruuning lsmod | grep -i dccp
+refer cis benchmark 3.4 for uncommon network protocols
+
+
+Identify and Disable Open Ports
+Inspect the system for open ports, once theyre identified, we then disable them if not required.
+just like unwanted packages are removed, its a good idea to remove unwanted services on the host..
+several processes when started are bind to a port.
+ports allows for segregations of traffic..
+ex:
+Let check the ssh service. the tcp port 22 is started on the machine when an ssh connection is initiated..
+systemctl status ssh
+to check if a port is in use or listing for a request run:
+netstat -an | grep -W LISTEN
+NB: You will see the various ports and where it allows connections from.
+you might see the ssh port 22 allowing connection from 0.0.0.0:22 which means from anywhere.
+You will see the etcd port, the apiserver and other k8s components and their open port and where the connection is allowed from.
+
+To check what each of the port are used for, check the /etc/services file, it stores information about the port, the service that owns the port and the protocol.
+ex:
+cat /etc/services | grep -w 53
+word (-w ensures that it matches only the whole word, so it won't match, for example, 530 or 153).
+To kwn which port should be open when installing a new software use the reference documentation for that software.
+Once you determine the ports that should be open, disable the ones not required...
 
