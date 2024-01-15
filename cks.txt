@@ -3695,7 +3695,25 @@ ufw status
 6.delete rule
 1. run ufw status, this will list the rules.
 count the rules from top to bottom in 1,2... and identify the rule you want to delete and run,
+or run ufw status numbered  --> show rules with numbers
 ufw delete 1
 ufw delete 2
-
 where the numbers refers to the specific firewall rule identified.. This will be interactive choose y for yes and the rules get deleted.
+
+IQ:
+ufw allow 1000:2000/tcp
+How can you reset ufw rules to their default settings?
+ufw reset
+ufw -h
+
+IQ:
+On the node01 host, add a rule to allow incoming SSH connections.
+Do not enable the firewall yet.
+ufw allow 22
+
+netstat -apat | grep -w LISTEN
+netstat -natp | grep -w LISTEN
+
+
+Linux Syscalls
+
