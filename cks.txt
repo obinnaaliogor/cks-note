@@ -3494,7 +3494,10 @@ lsmod | grep -i sctp
 follow the same step and add <dccp> into the /etc/modprobe.d/blacklist.conf file and run shutdown -r now to restart the system.
 verify if it blacklisted by ruuning lsmod | grep -i dccp
 refer cis benchmark 3.4 for uncommon network protocols
-
+reference:
+ How do I prevent a kernel module from loading automatically?
+https://access.redhat.com/solutions/41278
+https://access.redhat.com/security/cve/cve-2019-3874
 
 Identify and Disable Open Ports
 Inspect the system for open ports, once theyre identified, we then disable them if not required.
@@ -3505,7 +3508,8 @@ ex:
 Let check the ssh service. the tcp port 22 is started on the machine when an ssh connection is initiated..
 systemctl status ssh
 to check if a port is in use or listing for a request run:
-netstat -an | grep -W LISTEN
+netstat -an | grep -w LISTEN
+netstat -an -W LISTEN | grep -w 9090
 NB: You will see the various ports and where it allows connections from.
 you might see the ssh port 22 allowing connection from 0.0.0.0:22 which means from anywhere.
 You will see the etcd port, the apiserver and other k8s components and their open port and where the connection is allowed from.
@@ -3516,4 +3520,182 @@ cat /etc/services | grep -w 53
 word (-w ensures that it matches only the whole word, so it won't match, for example, 530 or 153).
 To kwn which port should be open when installing a new software use the reference documentation for that software.
 Once you determine the ports that should be open, disable the ones not required...
+Refer to the cis benchmark for more.
+https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#check-required-ports
 
+
+IQ:
+list installed packages on ubuntu system..
+ apt list --installed
+
+ list only active services on a system
+ systemctl list-units --type service
+ systemctl list-units -a --state=inactive
+ Which command can be used to list the kernel modules currently loaded on a system?
+ lsmod
+
+ IQ:
+ On the controlplane host, we have nginx service running which isn't needed on that system.
+ Stop the nginx service and remove its service unit file. Make sure not to remove nginx package from the system.
+
+ You can use systemctl list-units --all command to list all service unit files.
+
+ systemctl stop nginx
+ systemctl disable nginx
+ systemctl status nginx
+ rm  /lib/systemd/system/nginx.service
+ ---
+ Blacklist a kernel module eg evbug
+ vi /etc/modprobe.d/blacklist.conf
+
+ Types of kernel modules that are blacklisted and those not blacklisted:
+ cat /etc/modprobe.d/blacklist.conf
+# This file lists those modules which we don't want to be loaded by
+# alias expansion, usually so some other driver will be loaded for the
+# device instead.
+
+# evbug is a debug tool that should be loaded explicitly
+blacklist evbug
+
+# these drivers are very simple, the HID drivers are usually preferred
+blacklist usbmouse
+blacklist usbkbd
+
+# replaced by e100
+blacklist eepro100
+
+# replaced by tulip
+blacklist de4x5
+
+# causes no end of confusion by creating unexpected network interfaces
+blacklist eth1394
+
+# snd_intel8x0m can interfere with snd_intel8x0, doesn't seem to support much
+# hardware on its own (Ubuntu bug #2011, #6810)
+blacklist snd_intel8x0m
+
+# Conflicts with dvb driver (which is better for handling this device)
+blacklist snd_aw2
+
+# replaced by p54pci
+blacklist prism54
+
+# replaced by b43 and ssb.
+blacklist bcm43xx
+
+# most apps now use garmin usb driver directly (Ubuntu: #114565)
+blacklist garmin_gps
+
+# replaced by asus-laptop (Ubuntu: #184721)
+blacklist asus_acpi
+
+# low-quality, just noise when being used for sound playback, causes
+# hangs at desktop session start (Ubuntu: #246969)
+blacklist snd_pcsp
+
+# ugly and loud noise, getting on everyone's nerves; this should be done by a
+# nice pulseaudio bing (Ubuntu: #77010)
+blacklist pcspkr
+
+# EDAC driver for amd76x clashes with the agp driver preventing the aperture
+# from being initialised (Ubuntu: #297750). Blacklist so that the driver
+# continues to build and is installable for the few cases where its
+# really needed.
+blacklist amd76x_edac
+
+---
+Command to remove package
+apt remove <packagename>
+
+IQ:
+We have a service running on controlplane host which is listening on port 9090. Identify the service and stop the same to free the 9090 port.
+
+netstat -natp  | grep 9090
+This will list the listening service and its port
+
+controlplane ~ ✖ netstat -natp  | grep 9090
+tcp        0      0 0.0.0.0:9090            0.0.0.0:*               LISTEN      27937/apache2
+
+controlplane ~ ➜  systemctl stop apache2
+
+
+Minimize IAM roles
+
+Minimize external access to the network
+We stated that ports binds to services strategyically.
+The ssh service when established binds to the port 22
+cat /etc/services | grep ssh --> will display the protocol and service type.
+
+netstat -natp  | grep 22
+netstat -an  | grep 22 | grep -w LISTEN --> will display the port that the ssh service is listning on and also the incoming connection is from 0.0.0.0
+This is a security risk, without any additional configuration any device on the network can establish a connection into the network from the ip 0.0.0.0
+Going by the priciple of least priviledge this is not a desired configuration.
+
+Listing all the listning ports and their corresponding connection ip.
+netstat -an | grep -w LISTEN
+
+Restricting and securing access to networks using UFW uncomplicated firewall in a linux machine
+UFW Firewall Basics
+We will use the internal filtring packet of the linux kernel called netfilter to restrict networking connectivity to our application.
+say we want to restrict ssh connection to our app only from a specific ip <176.16.238.5> and not 0.0.0.0/0
+or restricting access to our webserver on port 80 from a source ip internally on <176.16.100.0/28>
+Note iptables is also commonly used to interface with netfilter.
+Securing the setup as stated above we look at UFW.
+This is a simple frontend interface for iptables, it provides a simple interface to setup firewall rules in linux.
+
+step 1. ssh into the app server
+2. run the command netstat -an | grep -w LISTEN
+find out the port that the ssh is listning on and it ip source.
+3. blocking connection specifying 0.0.0.0 which is from anywhere.
+
+4. install UFW package.
+1 apt-get update --> updates the apt repo
+apt-get install ufw --> installs the ufw
+enable and start the ufw service.
+systemctl enable ufw
+systemctl start ufw
+
+Using UFW to manage firewalls as per our requirements..
+check status of UFW.
+ufw status --> This should show inactive b/c we have not enabled any firewall rules.
+
+Lets define some rules.. We noted from our command on the app server
+netstat -an | grep -w LISTEN this shows that port 80, 22 and 8080 are allowing traffic from anywhere.
+
+Lets add outgoing rule, as you know by default outgoing rule should not be restricted.
+
+run:
+1. ufw default allow outgoing --> allows all outgoing traffic from the app server
+verify by running
+ufw status
+2. ufw default deny incoming --> restricts all incoming connections.
+verify by running
+ufw status
+this changes will not restrict connections on port 80,22 and 8080 from anywhere b/c we have not yet enabled the firewall.
+We will enable the firewall after setting the rule for the source ip of the connections we are trying to restrict.
+
+1 for the ssh add the allow rule. run
+ufw allow from 176.16.238.5 to any port 22 proto tcp
+
+2. add allow rule for port 80 for the app server
+ufw allow from 176.16.100.0/28 to any port 80 proto tcp
+
+3. ufw allow from 176.16.238.5 to any port 80 proto tcp
+
+4. run ufw deny 8080
+This will deny access on port 8080 from anywhere.
+Not really necessary since we already blocked access from anywhere in the first step..
+
+5. Lets enable the firewall, run
+ufw enable
+important: ensure all rules are in place b4 enabling the firewall to avoid loss in connection..
+verify rules, run
+ufw status
+
+6.delete rule
+1. run ufw status, this will list the rules.
+count the rules from top to bottom in 1,2... and identify the rule you want to delete and run,
+ufw delete 1
+ufw delete 2
+
+where the numbers refers to the specific firewall rule identified.. This will be interactive choose y for yes and the rules get deleted.
