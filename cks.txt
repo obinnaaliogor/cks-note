@@ -60,7 +60,7 @@ curl -L https://github.com/aquasecurity/kube-bench/releases/download/v0.7.0/kube
 Install kube-bench
 apt install ./kube-bench_0.7.0_linux_amd64.deb -f
 
-To validate, run kube-bench
+To validate run, kube-bench
 Reference: https://www.youtube.com/watch?v=jvmShTBSBoA&list=PLFkEchqXDZx6Bw3B2NRVc499j1TavjOvm
 
 
@@ -3716,4 +3716,77 @@ netstat -natp | grep -w LISTEN
 
 
 Linux Syscalls
+This will give us an insight to what happens when an application runs or when a process is started in linux.
+The linux kernel: This the core of the os, i.e the major component of the os.
+The kernel interfaces between the hardware and the software in an operating system.
+The kernel is indeed the core of an operating system (OS), and it serves as an interface between the hardware and the software. It manages hardware resources,
+such as memory, CPU, and devices, and provides essential services to the software applications running on the system. The kernel plays a crucial role in managing
+system resources efficiently and ensuring that different software components can interact with the hardware in a controlled and secure manner.
+The Kernel can be divided into two major areas, the kernel space and the user area.
+Processes run by users, applications such java,python,c,Ruby, containers runs in the userspace.
+The kernel itself runs inside the kernels space which inlcudes the kernel code, device drivers and kernel extensions.
 
+Applications running in the userspace:
+Say an application running in the kernels userspace wants to access the hardware such as memory or ssd to write data.
+This applications makes special requests to the kernel called systemcalls <Syscalls>
+ex:
+If you want to create a file touch /tmp/error.log this command alone will make several systemcalls to the kernel.
+
+example of systems calls.
+System calls (syscalls) are the mechanism through which user-level processes interact with the kernel in an operating system.
+They allow applications to request services from the kernel, such as file operations, process management, and device I/O. Here are some common examples of syscalls:
+
+1. **open()**: Used to open a file or create a new one. It returns a file descriptor, which is used for subsequent file operations.
+
+2. **read()**: Reads data from a file descriptor into a buffer in memory.
+
+3. **write()**: Writes data from a buffer in memory to a file descriptor.
+
+4. **close()**: Closes a file descriptor, releasing associated resources.
+
+5. **fork()**: Creates a new process that is a copy of the calling process.
+
+6. **exec()**: Loads a new program into the current process's address space, replacing the current program.
+
+7. **exit()**: Terminates the current process and returns an exit status to the parent process.
+
+8. **wait()**: Waits for the termination of a child process and retrieves its exit status.
+
+9. **socket()**: Creates a new network socket for communication.
+
+10. **connect()**: Establishes a connection to a remote network host using a socket.
+
+11. **accept()**: Accepts an incoming network connection on a listening socket.
+
+12. **send()** and **recv()**: Used for sending and receiving data over network sockets.
+
+13. **ioctl()**: Performs various control operations on devices, like configuring network interfaces or setting terminal attributes.
+
+14. **time()**: Retrieves the current system time.
+
+15. **kill()**: Sends a signal to a specified process or group of processes.
+
+These are just a few examples of syscalls, and the specific syscalls available may vary depending on the operating system and its version.
+These calls allow programs to interact with the underlying hardware and other processes in a controlled and secure manner.
+
+Tracing syscalls used by a process
+---------------------------------
+strace: This is a command in linux used to trace system calls used by an application and signals written by the application.
+bash
+which strace
+To check the system calls that was made to the linux kernel when we or an application executes a command in the /tmp file system such as touch /tmp/error.log
+we execute:
+bash
+strace touch /tmp/error.log
+This will display the syscalls used <execve> and variables. To check the number of variables executed by the system calls run,
+env | wc -L
+Tracing syscalls made by processes.
+1. get the PID of the process --> ps -aux | grep -i etcd or run pidof etcd then use the PID of the etcd to trace the system calls made by etcd.
+ex
+pidof etcd ---> 3268
+strace -p 3268 ---> outputs the syscals made by the etcd cluster
+strace -c 3268 --> outputs all syscalls by the etcd server
+
+To get all the syscalls made by the touch command run.
+strace -c touch /tmp/error.log
+This will output all syscalls made by the touch command.. Summarily a simple command such as touch can make series of system calls.
