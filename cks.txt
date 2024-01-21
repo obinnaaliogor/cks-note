@@ -4280,4 +4280,15 @@ getpcaps <pid>  --> This will list the capabilities of the ssh process
 
 
 
+Minimize Microservice Vulnerabilities
+Security Contexts:
+You add securityConntext for pods and containers to run with the basic priviledges they require.
+You can also drop and add system capabilities.
+check the k8s docs, these things falls under minimizing Microservice vulnerabilities.
+Reference: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+
+
+Admission Controllers
+
+
 
