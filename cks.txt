@@ -621,17 +621,17 @@ Security:
 
 						Before using this command, make sure the following is in place:
 
-						1. **Certificate Files**: Ensure that the `admin.key`, `admin.crt`, and `ca.crt` files exist and are correctly configured.
+						1. Certificate Files: Ensure that the `admin.key`, `admin.crt`, and `ca.crt` files exist and are correctly configured.
 
-						2. **Client Certificate and Key**: The `admin.key` and `admin.crt` files should match a valid client certificate and key pair that have the necessary permissions to access the Kubernetes API server.
+						2. Client Certificate and Key: The `admin.key` and `admin.crt` files should match a valid client certificate and key pair that have the necessary permissions to access the Kubernetes API server.
 
-						3. **CA Certificate**: The `ca.crt` file should be the CA certificate used by your Kubernetes cluster for server certificate verification.
+						3. CA Certificate: The `ca.crt` file should be the CA certificate used by your Kubernetes cluster for server certificate verification.
 
-						4. **Kubernetes API Server**: The URL `https://kube-apiserver:6443` should point to the correct Kubernetes API server and be accessible from the machine where you are running `curl`.
+						4. Kubernetes API Server: The URL `https://kube-apiserver:6443` should point to the correct Kubernetes API server and be accessible from the machine where you are running `curl`.
 
-						5. **Network Access**: Ensure that your machine has network access to the Kubernetes API server on port 6443.
+						5. Network Access: Ensure that your machine has network access to the Kubernetes API server on port 6443.
 
-						6. **Authorization**: Depending on your Kubernetes cluster's RBAC configuration, you may need the appropriate permissions to access the `/api/v1/pods` endpoint.
+						6. Authorization: Depending on your Kubernetes cluster's RBAC configuration, you may need the appropriate permissions to access the `/api/v1/pods` endpoint.
 
 						If everything is set up correctly, the `curl` command should be able to communicate with the Kubernetes API server and retrieve information about pods in your cluster.
 
@@ -3736,35 +3736,35 @@ example of systems calls.
 System calls (syscalls) are the mechanism through which user-level processes interact with the kernel in an operating system.
 They allow applications to request services from the kernel, such as file operations, process management, and device I/O. Here are some common examples of syscalls:
 
-1. **open()**: Used to open a file or create a new one. It returns a file descriptor, which is used for subsequent file operations.
+1. open(): Used to open a file or create a new one. It returns a file descriptor, which is used for subsequent file operations.
 
-2. **read()**: Reads data from a file descriptor into a buffer in memory.
+2. read(): Reads data from a file descriptor into a buffer in memory.
 
-3. **write()**: Writes data from a buffer in memory to a file descriptor.
+3. write(): Writes data from a buffer in memory to a file descriptor.
 
-4. **close()**: Closes a file descriptor, releasing associated resources.
+4. close(): Closes a file descriptor, releasing associated resources.
 
-5. **fork()**: Creates a new process that is a copy of the calling process.
+5. fork(): Creates a new process that is a copy of the calling process.
 
-6. **exec()**: Loads a new program into the current process's address space, replacing the current program.
+6. exec(): Loads a new program into the current process's address space, replacing the current program.
 
-7. **exit()**: Terminates the current process and returns an exit status to the parent process.
+7. exit(): Terminates the current process and returns an exit status to the parent process.
 
-8. **wait()**: Waits for the termination of a child process and retrieves its exit status.
+8. wait(): Waits for the termination of a child process and retrieves its exit status.
 
-9. **socket()**: Creates a new network socket for communication.
+9. socket(): Creates a new network socket for communication.
 
-10. **connect()**: Establishes a connection to a remote network host using a socket.
+10. connect(): Establishes a connection to a remote network host using a socket.
 
-11. **accept()**: Accepts an incoming network connection on a listening socket.
+11. accept(): Accepts an incoming network connection on a listening socket.
 
-12. **send()** and **recv()**: Used for sending and receiving data over network sockets.
+12. send() and recv(): Used for sending and receiving data over network sockets.
 
-13. **ioctl()**: Performs various control operations on devices, like configuring network interfaces or setting terminal attributes.
+13. ioctl(): Performs various control operations on devices, like configuring network interfaces or setting terminal attributes.
 
-14. **time()**: Retrieves the current system time.
+14. time(): Retrieves the current system time.
 
-15. **kill()**: Sends a signal to a specified process or group of processes.
+15. kill(): Sends a signal to a specified process or group of processes.
 
 These are just a few examples of syscalls, and the specific syscalls available may vary depending on the operating system and its version.
 These calls allow programs to interact with the underlying hardware and other processes in a controlled and secure manner.
@@ -3880,23 +3880,23 @@ For educational purpose:
 Yes, you're correct. In modern operating systems, there is a clear distinction between user space and kernel space. This separation is essential for security and stability.
 Here's how it works:
 
-1. **User Space**: This is where user applications and processes run. User space processes cannot directly access hardware or memory addresses.
+1. User Space: This is where user applications and processes run. User space processes cannot directly access hardware or memory addresses.
 They operate in a restricted environment to ensure that an errant or malicious process cannot compromise the entire system.
 
-2. **Kernel Space**: The kernel operates in kernel space and has unrestricted access to the hardware. It manages hardware interactions, system resources,
+2. Kernel Space: The kernel operates in kernel space and has unrestricted access to the hardware. It manages hardware interactions, system resources,
 and low-level system operations.
 
-3. **System Calls (Syscalls)**: When a user space application needs to perform an operation that requires hardware access, such as reading from a disk,
+3. System Calls (Syscalls): When a user space application needs to perform an operation that requires hardware access, such as reading from a disk,
 sending network data, or accessing a device, it makes a system call.
  A system call is a programmed request to the kernel to perform a task that the application cannot do on its own.
 
-4. **How Syscalls Work**:
+4. How Syscalls Work:
     - The application invokes a syscall, passing the necessary parameters.
     - The CPU switches from user mode to kernel mode, where it has access to protected system resources.
     - The kernel evaluates the request, performs the operation, or accesses the hardware as needed.
     - After the operation, control is returned to the user space application, often with some result or data.
 
-5. **Examples of Syscalls**:
+5. Examples of Syscalls:
     - File operations like open, read, write, close.
     - Network operations like send, receive.
     - Process management like fork, exec.
@@ -3908,6 +3908,16 @@ which could lead to system instability or security vulnerabilities. The kernel a
 
 Restrict syscalls using seccomp
 --------------------------------
+Objectives
+
+    Learn how to load seccomp profiles on a node
+    Learn how to apply a seccomp profile to a container
+    Observe auditing of syscalls made by a container process
+    Observe behavior when a missing profile is specified
+    Observe a violation of a seccomp profile
+    Learn how to create fine-grained seccomp profiles
+    Learn how to apply a container runtime default seccomp profile
+
 As we have learnt applications ruuning in the kernel user space makes syscalls to the kernel space to access resources that they require.
 We are going to allow only required syscalls to be made by applications using seccomp.
 Knowing fully well that an application executing a simple ls command makes lots of syscalls, its therefore of importance to restrict syscalls and grant permission based on
@@ -3916,25 +3926,25 @@ Least privilege..
  this vulnerability was particularly noteworthy
 for several reasons:
 
-1. **Age and Ubiquity**: The bug existed in the Linux kernel for a long time – over nine years – before it was discovered and fixed. Given the widespread use of Linux in
+1. Age and Ubiquity: The bug existed in the Linux kernel for a long time – over nine years – before it was discovered and fixed. Given the widespread use of Linux in
  various devices and servers, the impact potential was significant.
 
-2. **Nature of the Vulnerability**: Dirty COW was a race condition found in the way the Linux kernel's memory subsystem handled the copy-on-write (COW) mechanism.
+2. Nature of the Vulnerability: Dirty COW was a race condition found in the way the Linux kernel's memory subsystem handled the copy-on-write (COW) mechanism.
  A race condition occurs when multiple processes access and manipulate shared data concurrently, and the outcome depends on the particular order in which the access occurs.
 
-3. **Exploitation**: The vulnerability allowed a local user (someone with access to the system) to gain write access to read-only memory mappings.
+3. Exploitation: The vulnerability allowed a local user (someone with access to the system) to gain write access to read-only memory mappings.
 This flaw could be exploited to increase a user's privileges on the system. In practical terms, an attacker with basic user permissions could exploit
 this vulnerability to gain root access to the entire system, bypassing security restrictions.
 
-4. **Notoriety and Impact**: Dirty COW gained widespread attention due to its simplicity and the ease with which it could be exploited.
+4. Notoriety and Impact: Dirty COW gained widespread attention due to its simplicity and the ease with which it could be exploited.
 It was a serious issue for all Linux-based systems, including web servers, Android devices, and embedded systems.
 The vulnerability became a concern for system administrators and security professionals globally.
 
-5. **Patch and Response**: The Linux community responded quickly once the vulnerability was publicly disclosed. Patches were released to fix the issue,
+5. Patch and Response: The Linux community responded quickly once the vulnerability was publicly disclosed. Patches were released to fix the issue,
 and system administrators were advised to update their Linux kernels as soon as possible. Despite the availability of the patch, the ease of exploitation and the number
  of systems affected meant that Dirty COW posed a significant challenge for some time.
 
-6. **Learning and Awareness**: Dirty COW served as a reminder of the importance of regular system updates and vigilance in security practices.
+6. Learning and Awareness: Dirty COW served as a reminder of the importance of regular system updates and vigilance in security practices.
 It also highlighted the challenges in detecting and managing security vulnerabilities in widely-used open-source software.
 
 The discovery and response to Dirty COW underscored the ongoing need for effective security practices, including regular patch management, system monitoring,
@@ -3949,7 +3959,7 @@ This can increase the attack surface, we will use seccomp to stop this.
 seccomp stands for secure computing. This is the kernel level feature that is used to restrict application to use the syscalls they need.
 check if the kernel in the host has seccomp by looking at the boot config file.
 
-grep -i seccomp /boot/config -$(uname -r)
+grep -i seccomp /boot/config-$(uname -r)
 The complete command searches the kernel's configuration file for any line containing 'seccomp', regardless of case.
 This is useful for checking if the current kernel was compiled with seccomp support enabled, which is an important security feature for many applications and services.
 The output of this command will show the configuration lines from the kernel configuration file that mention seccomp,
@@ -3957,3 +3967,164 @@ typically indicating whether it's enabled (=y) or not (=n).
 The =y options means that the kernel supports seccomp and -n means not supported.
 
 Demo how syscalls by an application can be restricting using seccomp.
+---------------------------------------------------------------------
+ex:
+run a container
+If you run a docker container, by default docker implements seccomps on containers.
+This b/c when you try to make some systemcalls say to modify the system time, you will not be able to do this.
+docker run -it --rm docker/whalesay /bin/sh
+
+date -s "20 Jan 2024 17:00:00"
+date: cannot set date: Operation not permitted
+Mon Oct  2 18:00:00 UTC 2006
+
+From the above output you can see that you are not permitted to do that..
+check the process inside the container
+ps -ef
+You will see a process id for the /bin/sh as --> 1
+
+Lets check how seccomp is implimented in the container:
+grep for seccomp in /proc/1/status --> This will tell you how seccomp was impliment in the container by docker.
+grep Seccomp /proc/1/status
+
+Common output from the above command:
+1. value of 0 --> secommp is DISABLED mode
+2. value 0f 1 --> Seccomp is applied in STRICT mode except for read syscalls
+3. value of 2 --> Secommp is implemented on the container in FILTERED mode
+
+Once the host kernel has seccomp enabled, docker implements seccomp o the container using it default seccomp profile.
+The docker default seccomp profile is responsible for the restriction of modification of the system time.
+
+Seccomp profiles:
+SCMP_ACT_ERRNO --> disallow all sys calls execpt the ones stated in the array, this syscall type is known as whitelist profile.
+SCMP_ACT_ALLOW --> This a blacklist type of seccomp profile that allows all syscalls and block the ones in the array list.
+
+The seccomp profile implemented by docker blocks around 60 syscalls by default when a container is run.
+ex:
+reboot, umount,clock_settime,clock_adjtime,swapoff etc.
+check the below refernce to find out all the blocked syscalls by docker:
+
+Lets create a seccomp custom.json profile using SCMP_ACT_ERRNO and remove the mkdir syscall from the list of array of the syscalls that are allowed.
+We will see that when a pod is created with this custom.json Seccomp profile passed as securityContext to the pod in kubernetes, the pod will remain in creating mode.
+
+why??
+Because our applications need to access the root filesystem and write data to the / file system..
+Without having access to this directory to write data and access data, the pod when created will remaing in container creating..
+Important: add the mkdir syscall back to the custom.json file and see the pod created and running.
+
+This now brings us to the question of how can we allow applications access a specific file/directory, data they require to write data?
+
+but in docker, if you run a container with the seccomp custom.json file, the container will run but you wont be able to create a directory.
+example below:
+docker run -it --rm --security-opt seccomp=/root/custom.json docker/whalesay /bin/sh --> Running a container with custom.json seccomp profile.
+the details inside the  custom profile will SCMP_ACT_ERRNO blacklist seccomp profile that blocks everything and allows a few.
+
+docker run -it --rm --security-opt seccomp=unconfined docker/whalesay /bin/sh --> This will allow us use all syscalls, it disables seccomp.
+This has huge security implication and it is not a good practice.
+Security Option (--security-opt seccomp=unconfined): This setting disables the default seccomp (Secure Computing Mode) profile for the container.
+ Seccomp is a Linux kernel feature that restricts the system calls a process can make. By setting it to unconfined, you allow the container to use all system calls, effectively removing these security restrictions. This can be useful for debugging or running applications that require a wide range of system calls,
+ but it also increases the security risk.
+
+Summarily:
+dissabling seccomp does not mean that all syscalls can run b/c docker has a built in default seccomp profile in all containers created that restricts certain syscall as stated above.
+
+
+Implement Seccomp in Kubernetes:
+Reference: https://kubernetes.io/docs/tutorials/security/seccomp/
+
+In docker lets run a container and determine how many syscalls was blocked.
+docker run r.j3ss.co/amicontained amicontained
+you will see that seccomp is running in mode 2 or filtering mode..
+
+In k8s create a pod using the same image and check the logs of the container to see that;
+1. seccomp is status is disbaled.
+2. by default seccomp is not enabled in k8s
+3. some syscalls will be blocked about 21 due to the docker deafult seccomp profile enabled by default when a container is created.
+4. To implement seccomp to the pod, we have to add seccomp using securityContext in the pod definition, spec.securityContext.seccompProfile
+ex:
+spec:
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault  --> using default docker RuntimeDefault seccomp profile.
+
+Important: do not allow allowPrivilegeEscalation and privileged for the container sets these to false to avoid the application from escaping
+and Escalating its priviledge, it makes it run with the bare minimum priviledges it needs to fxn properly.
+---
+
+spec:
+  securityContext:
+    seccompProfile:
+      type: Localhost
+      localhostProfile: profiles/audit.json
+---
+
+spec:
+  securityContext:
+    seccompProfile:
+      type: Localhost
+      localhostProfile: profiles/violation.json
+Important: This section localhostProfile must be relative to the default seccomp profile location.
+default seccomp profile location is /var/lib/kubelet/seccomp
+create a directory inside this ex: mkdir -p /var/lib/kubelet/seccomp/profiles in the default seccomp profile path on the host.
+then inside the profiles create custom.json, audit.json file in the default path inside the profiles.
+NB: Since by default the kubelet checks /var/lib/kubelet/seccomp and you have added profiles/audit.json to it.
+Provide only the relative to the pod in the spec.securityContext.seccompProfile the kubelet will pick it up from seccomp profile defined in that path.
+
+ex:
+securityContext:
+    seccompProfile:
+      type: Localhost
+      localhostProfile: profiles/audit.json
+
+
+Enable the use of RuntimeDefault as the default seccomp profile for all workloads
+--seccomp-default
+This will not overried the entries in the spec.securityContext.seccompProfile
+
+2. create a pod with this:
+
+spec:
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault  --> using default docker RuntimeDefault seccomp profile.
+	  nb: remember to disallow priviledge and allowPrivilegeEscalation
+	  check the logs and see that more syscalls are blocked..
+
+
+spec:
+  securityContext:
+    seccompProfile:
+      type: Unconfined
+
+
+Importand:
+SCMP_ACT_LOG allows the system call to proceed but logs the event. This is particularly useful for debugging and auditing purposes,
+as it enables you to see which system calls are being made without interrupting the normal operation of the process.
+more: https://kubernetes.io/docs/tutorials/security/seccomp/
+
+Note: Syscalls generated by docker containers are logged in
+/var/log/syslog file
+The syscalls here are logged as numbers and it also shows the uid,gid of the caller.
+In ubuntu, to map the syscall number to the name of the syscall check the file:
+grep -W 34 /usr/include/asm/unistd_64.h
+where 34 is the number of the syscall, when you run this, it will display the syscall that was made..
+
+Automating discovery of the syscall used by the container we use tracee in k8s as a pod.
+
+docker run --rm --name tracee -v /tmp/tracee:/tmp/tracee -v /lib/modules:/lib/modules:ro -v /usr/src:/usr/src:ro --privileged --pid=host aquasec/tracee --trace container=new
+This will display all the syscalls made by the docker container.
+
+
+spec:
+  securityContext:
+    seccompProfile:
+      type: Localhost
+      localhostProfile: profiles/violation.json
+	  Creating a container with this in k8s will result in container cannot run.
+	  the key to using seccomp profile is to successfully determine which systemcalls your application needs and block those not required..
+
+IQ
+kubectl logs -f `kubectl get pods -l=io.kompose.service=tracee -o custom-columns=":metadata.name" --no-headers`
+
+
+AppArmor:
