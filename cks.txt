@@ -4289,6 +4289,616 @@ Reference: https://kubernetes.io/docs/tasks/configure-pod-container/security-con
 
 
 Admission Controllers
+Ref: https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/
+ps -ef | grep kube-apiserver | grep admission-plugins
 
+How do I turn off an admission controller?
+--disable-admission-plugins=PodNodeSelector,AlwaysDeny ...
+
+
+Validating and Mutating Admission Controllers
+webhook server:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webhook-server
+  namespace: webhook-demo
+  labels:
+    app: webhook-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webhook-server
+  template:
+    metadata:
+      labels:
+        app: webhook-server
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1234
+      containers:
+      - name: server
+        image: stackrox/admission-controller-webhook-demo:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8443
+          name: webhook-api
+        volumeMounts:
+        - name: webhook-tls-certs
+          mountPath: /run/secrets/tls
+          readOnly: true
+      volumes:
+      - name: webhook-tls-certs
+        secret:
+          secretName: webhook-server-tls
+
+explanation:
+the deployed demo webhook which does below
+
+- Denies all request for pod to run as root in container if no securityContext is provided.
+
+- If no value is set for runAsNonRoot, a default of true is applied, and the user ID defaults to 1234
+
+- Allow to run containers as root if runAsNonRoot set explicitly to false in the securityContext
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhook-server
+  namespace: webhook-demo
+spec:
+  selector:
+    app: webhook-server
+  ports:
+    - port: 443
+      targetPort: webhook-api
+---
+cat /root/webhook-configuration.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: demo-webhook
+webhooks:
+  - name: webhook-server.webhook-demo.svc
+    clientConfig:
+      service:
+        name: webhook-server
+        namespace: webhook-demo
+        path: "/mutate"
+      caBundle: xxxxxxx-xxxx-xxxxx-xxxxx-x-x-xx-x-x-xxxxxx-x--xxxxxx-x-x
+	  rules:
+      - operations: [ "CREATE" ]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+    admissionReviewVersions: ["v1beta1"]
+    sideEffects: None
+
+test or validate:
+echo I am running as user $(id -u)
+ cat /root/pod-with-defaults.yaml
+# A pod with no securityContext specified.
+# Without the webhook, it would run as user root (0). The webhook mutates it
+# to run as the non-root user with uid 1234.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-with-defaults
+  labels:
+    app: pod-with-defaults
+spec:
+  restartPolicy: OnFailure
+  containers:
+    - name: busybox
+      image: busybox
+      command: ["sh", "-c", "echo I am running as user $(id -u)"]
+
+When you apply this, you will see that the pod will be mutated to add securitycontext to run as user describe in the webhook server.
+you can also deploy validating webhook config file or resource.
+
+validate/verify:
+cat /root/pod-with-override.yaml
+# A pod with a securityContext explicitly allowing it to run as root.
+# The effect of deploying this with and without the webhook is the same. The
+# explicit setting however prevents the webhook from applying more secure
+# defaults.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-with-override
+  labels:
+    app: pod-with-override
+spec:
+  restartPolicy: OnFailure
+  securityContext:
+    runAsNonRoot: false
+  containers:
+    - name: busybox
+      image: busybox
+      command: ["sh", "-c", "echo I am running as user $(id -u)"]
+This is requesting for the pod to run as root by stating the runAsNonRoot as false.
+-----
+
+Validate/verify:
+This will fail,
+at /root/pod-with-conflict.yaml
+# A pod with a conflicting securityContext setting: it has to run as a non-root
+# user, but we explicitly request a user id of 0 (root).
+# Without the webhook, the pod could be created, but would be unable to launch
+# due to an unenforceable security context leading to it being stuck in a
+# 'CreateContainerConfigError' status. With the webhook, the creation of
+# the pod is outright rejected.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-with-conflict
+  labels:
+    app: pod-with-conflict
+spec:
+  restartPolicy: OnFailure
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 0
+  containers:
+    - name: busybox
+      image: busybox
+      command: ["sh", "-c", "echo I am running as user $(id -u)"]
+
+controlplane ~ ➜  k create -f /root/pod-with-conflict.yaml
+Error from server: error when creating "/root/pod-with-conflict.yaml":
+admission webhook "webhook-server.webhook-demo.svc" denied the request: runAsNonRoot specified, but runAsUser set to 0 (the root user)
+
+
+Pod Security Policies
+This helps us restricts pods from been created with high risk capabilities and applications giving only the required priviledges they need to run.
+PSP is deprecated in v1.25 and replaced with Pod security standards "PSS" and pod security admission "PSA".
+How does PSA work?
+When pods are created with PSA, the pod security admission controller validates the requests against the set of rules and then grants or denys the requests based
+on the rules defined.
+PSP is deployed as admission controller and to enable PSA we add it as an option to the enable-admission-plugin in the kube-apiserver configuration file.
+
+ex:
+  1. k exec -n kube-system kube-apiserver-cluster1-controlplane -- kube-apiserver -h | grep enable-admission-plugins
+  look for PodSecurityPolicy admission controller. and enable it buy updated the kube-apiserver.yaml file
+  --enable-admission-plugins=PodSecurityPolicy
+  REF: https://kubernetes.io/blog/2019/03/21/a-guide-to-kubernetes-admission-controllers/
+
+  2. We create a psp object or pod security policy object.
+  REF: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: fine-grained-psp
+spec:
+  privileged: false  # Prevents running privileged Pods
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL  # Drops all capabilities
+  allowedCapabilities:
+    - NET_BIND_SERVICE  # Only allow specific capabilities
+  volumes:
+    - configMap
+    - emptyDir
+    - projected
+    - secret
+    - downwardAPI
+    - persistentVolumeClaim  # Restrict allowed volume types
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: MustRunAsNonRoot  # Enforce non-root users
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: MustRunAs
+    ranges:
+      - min: 100
+        max: 200
+  fsGroup:
+    rule: MustRunAs
+    ranges:
+      - min: 100
+        max: 200
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+Pod security policy can also be used to not only restrict the creation of pods with certain priviledges can also mutate the creation of object by adding/dropping capabilities.
+
+4. Create a service account or use existing serviceaccount.
+4. create a clusterrole, this will have verbs as "use" and resourceNames is the psp we created.
+ex:
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: psp-clusterrole
+rules:
+- apiGroups: ['policy']
+  resources: ['podsecuritypolicies']
+  verbs:     ['use']
+  resourceNames:
+  - fine-grained-psp
+
+Create a clusterrolebinding to bind the clusterrole to the default sa.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: psp-binding
+roleRef:
+  kind: ClusterRole
+  name: psp-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: default
+
+  validate:
+---
+cat 6.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: test
+  name: test
+spec:
+  serviceAccountName: default
+  containers:
+  - image: nginx
+    name: test
+    securityContext:
+      privileged: true
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+
+
+   k create -f 6.yaml
+Error from server (Forbidden): pods "test" is forbidden: PodSecurityPolicy:
+unable to admit pod: [spec.containers[0].securityContext.privileged: Invalid value: true: Privileged containers are not allowed]
+
+Important: Podsecurity admission is the much simpler approach.
+-----
+
+Pod Security Admission and Pod Security Standards
+This allows for easy implimentation of podsecurity in our clusters and anything requiring complexity should be tailored to use external providers like kyverno,opa etc
+podsecurity admission controller is enabled by default.
+run;
+  1. k exec -n kube-system kube-apiserver-cluster1-controlplane -- kube-apiserver -h | grep enable-admission-plugins
+  This output will show you those enabled by default and a combination of those enabled and not enabled by default.
+  enabled by default:
+    --enable-admission-plugins strings       admission plugins that should be enabled in addition to default enabled ones (NamespaceLifecycle,
+	LimitRanger, ServiceAccount, TaintNodesByCondition, PodSecurity, Priority, DefaultTolerationSeconds, DefaultStorageClass, StorageObjectInUseProtection, PersistentVolumeClaimResize, RuntimeClass, CertificateApproval,
+	CertificateSigning, CertificateSubjectRestriction, DefaultIngressClass, MutatingAdmissionWebhook, ValidatingAdmissionWebhook, ResourceQuota).
+
+	When you look at the output of the command you will see a dot "." that ends the default enabled admission controllers and you dont need to enable them in the
+	apiserver.yaml file.
+	You see the onces after the . is a combination of both enabled and non enabled.
+
+	Configure PSA:
+PSA is configured at a namespace level..
+Reference: https://kubernetes.io/docs/concepts/security/pod-security-admission/
+1. label the namespace you want to implement PSA
+
+kubectl label ns <namspacename> pod-security.kubernetes.io/<MODE>-version: <VERSION>
+kubectl label ns <namspacename> pod-security.kubernetes.io/<MODE>=<security-standard>
+You should apply this to all namespaces since you do not kwn where to pod will be scheduled.
+what are the pod security standard?
+
+3 security standard are implemented using built in profile/rule.
+1. restricted --> heavily restricted
+2. baseline --> minimal restriction
+3. privileged --> unrestricted
+
+2. mode this is the action the controlplane will take if the security-standard is violated.
+1.  enforce --> allow or deny pod
+2.  audit -> record the events in the audit logs
+3.  warn --> trigger-user facing warning
+----
+# The per-mode level label indicates which policy level to apply for the mode.
+#
+# MODE must be one of `enforce`, `audit`, or `warn`.
+# LEVEL must be one of `privileged`, `baseline`, or `restricted`.
+pod-security.kubernetes.io/<MODE>: <LEVEL>
+
+# Optional: per-mode version label that can be used to pin the policy to the
+# version that shipped with a given Kubernetes minor version (for example v1.29).
+#
+# MODE must be one of `enforce`, `audit`, or `warn`.
+# VERSION must be a valid Kubernetes minor version, or `latest`.
+pod-security.kubernetes.io/<MODE>-version: <VERSION>
+
+
+references:
+ https://kubernetes.io/docs/tasks/configure-pod-container/enforce-standards-namespace-labels/
+ https://kubernetes.io/docs/concepts/security/pod-security-standards/#privileged
+
+ Policy Instantiation
+ https://kubernetes.io/docs/concepts/security/pod-security-standards/#what-s-the-difference-between-a-security-profile-and-a-security-context
+ apiVersion: v1
+kind: Namespace
+metadata:
+  name: my-privileged-namespace
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest
+	---
+	apiVersion: v1
+kind: Namespace
+metadata:
+  name: my-baseline-namespace
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn-version: latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: my-restricted-namespace
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+
+
+Understanding Pod Security Policy
+
+PodSecurityPolicy serves as an admission controller within Kubernetes, enabling cluster administrators to effectively manage security-related aspects of thePod specification.
+By creating PodSecurityPolicy resources and defining requirements for Pods, administrators can control which Pods are allowed to run based on security policies.
+If a Pod complies with the defined PSP requirements, it is admitted to the cluster; otherwise, it is rejected.
+The Need for Pod Security Policy:
+
+Kubernetes resources like Deployments, StatefulSets, and Services form the foundation of applications. However, RBAC alone, which controls access to these resources,
+ does not consider the specific settings within the resources.
+ PodSecurityPolicy was introduced to address this gap and provide fine-grained control over security-related fields in Pods.
+ It enabled administrators to prevent privileges and settings that could pose security risks, without relying on external admission controllers.
+
+Over time, it became evident that PodSecurityPolicy had inherent usability challenges that necessitated breaking changes.
+
+PSP faces two major drawbacks: the absence of support for additional resource types and its limited set of controls that overlooks certain container
+runtime-specific characteristics.
+ Other than that, several complexities are attached to PSPs.
+
+    Confusing Application of PSPs: Users often found it challenging to correctly apply PodSecurityPolicy to Pods, leading to unintended and broader permissions.
+    Limited Visibility: It was difficult to determine which PodSecurityPolicy applied to a specific Pod, making it hard to track and understand the security policies in place.
+    Limited Support for Changing Pod Defaults: Modifying default values for Pod settings through PodSecurityPolicy had limited scope, causing inconsistencies and unpredictability.
+    Lack of Audit Mode or Dry Run Capability: The absence of an audit mode or dry run capability made it impractical to assess the impact of
+	PSPs before enforcing them or retrofitting them to existing clusters safely.
+    Challenges in Enabling PSP by Default: The complexities and potential risks associated with PodSecurityPolicy made it infeasible to enable
+	it by default across clusters, limiting its widespread adoption.
+
+These usability challenges collectively drove the need for breaking changes and a more user-friendly solution to secure Pod deployments,
+leading to the deprecation of PodSecurityPolicy in Kubernetes.
+
+For further insights into these and other challenges related to PSP (Pod Security Policies), we recommend watching the SIG Auth’s Maintainer
+Track session video from KubeCon NA 2019. This video provides valuable information on PSP difficulties.
+
+SIG Auth Update and Deep Dive – Mo Khan, Red Hat; Mike Danese, Google; & Tim Allclair, Google
+
+As you all know, In Kubernetes 1.21, PodSecurityPolicy (PSP) is being deprecated and removed from Kubernetes 1.25,
+paving the way for a replacement that offers improved functionality and sustainability.
+Transitioning to a New Pod Security Solution
+
+With the phasing out and discontinuation of actively developed Pod Security Policies (PSPs), it becomes crucial for cluster administrators and
+operators to find alternative security measures. Fortunately, there are two promising options available to meet this need:
+
+    Policy-as-code (PAC) solutions within the Kubernetes ecosystem.
+    The Kubernetes Pod Security Standards (PSS) with Pod Security Admission (PSA)
+
+In the Kubernetes community, several open source PAC solutions have emerged, providing a reliable alternative to PSPs. These solutions,
+although not officially part of the Kubernetes project, can be obtained from the Kubernetes ecosystem. Some notable examples of PAC solutions include:
+
+    Kyverno
+
+    OPA/Gatekeeper
+    Open Policy Agent (OPA)
+    jsPolicy
+
+Here comes the lesson topic,
+
+Pod Security Admission (PSA) and Kubernetes Pod Security Standards (PSS).
+
+The Pod Security Standards (PSS) and Pod Security Admission (PSA) were introduced by the Kubernetes Auth Special Interest Group (SIG)
+in response to the deprecation of the Pod Security Policy (PSP) and the ongoing requirement of managing pod security in Kubernetes. PSA is
+an integrated solution within Kubernetes that offers built-in capabilities for governing pod security. The solution incorporates a webhook
+project designed for admission controllers, which ensures enforcement of the controls outlined in the Pod Security Standards (PSS).
+This admission controller approach bears similarity to the functioning of PAC (Policy as Code) systems.
+
+Bit about Pod Security Standards(PSS)
+
+PSS defines three different security policies that cover a wide range of security needs. These policies are cumulative and vary in their level of restrictiveness:
+
+    Privileged: This policy grants the highest level of access without any restrictions. It is useful for system-wide programs like logging agents,
+	CNIs, and storage drivers that require privileged access.
+    Baseline: This policy aims to be highly restrictive to prevent known privilege escalation while still allowing the use of the default
+	Pod configuration with minimal alterations. The baseline policy imposes restrictions on specific capabilities, including hostNetwork, hostPID,
+	hostIPC, hostPath, hostPort, and the addition of Linux capabilities.
+    Restricted: This strict policy follows current best practices for hardening Pods. It builds upon the baseline policy and adds additional constraints,
+	 such as prohibiting the Pod from running as the root user or in the root group. Restricted policies may affect the functionality
+	 of applications and are designed for running security-critical applications.
+
+Read more about PSS in the official Kubernetes documentation: https://kubernetes.io/docs/concepts/security/pod-security-standards/
+
+These policies define different execution profiles for Pods, categorized into privileged and limited access tiers.
+
+Pod Security Admission(PSA) operates in three modes to enforce the controls defined by PSS:
+
+Enforce: When this mode is enabled, the PSA evaluates the Pod against the policy. If the Pod fails to meet the policy requirements, it is rejected.
+
+Audit: In this mode, the Pod is allowed to run even if it violates the policy. However, the violation is recorded in the Kubernetes audit log.
+
+Warn: This mode generates a warning for any policy violation but does not prevent the Pod from running.
+Let’s Understand Namespace Labels in PSA
+
+Namespace labels play a crucial role in implementing PSA. They determine the policy level that applies to all Pods within a specific namespace. Here’s how they work:
+
+First, Label Key: The key used for labeling namespaces is pod-security.kubernetes.io/enforce, pod-security.kubernetes.io/audit, and pod-security.kubernetes.io/warn.
+
+Then, Label Value: The value of these labels indicates the policy level to be enforced, audited, or warned. These levels are typically privileged,
+baseline, or restricted, aligning with the Pod Security Standards.
+Let’s take a look at an example scenario
+
+In Enforce Mode:
+
+The Namespace Label looks like this.. pod-security.kubernetes.io/enforce: restricted
+
+The Effect will be that any Pod that doesn’t meet the ‘restricted’ PSS in this namespace will be rejected.
+
+In the Audit Mode,
+
+The Namespace Label looks like this.
+
+ pod-security.kubernetes.io/audit: baseline
+
+The Effect of this label will be that violations and violations of the ‘baseline’ PSS are logged in the audit log, but Pods are allowed to run.
+
+Finally, the Warn Mode.
+
+The Namespace Label is like this.
+
+pod-security.kubernetes.io/warn: privileged
+
+The Effect is that warnings and warnings are generated for any Pod that doesn’t meet the ‘privileged’ standard, but no enforcement occurs.
+Let’s get an idea about the practical considerations of these.
+
+If no labels are present on a namespace, a default policy (usually the least restrictive) is applied.
+
+Also, A namespace can have labels for all three modes, each specifying a different policy level.
+
+Finally, Be cautious with changing labels, as escalating policy levels can lead to existing Pods being out of compliance.
+
+More about configuring the built-in admission controller can be found here.
+https://kubernetes.io/docs/tasks/configure-pod-container/enforce-standards-admission-controller/#configure-the-admission-controller
+
+Imagine you’re setting up security in a Kubernetes cluster, using Pod Security Admission (PSA) to enforce certain rules. But, like in any good security system,
+you realize there are some special cases, some exceptions to the rule. That’s where PSA exemptions come in.
+
+Think of PSA as a strict security guard, but one who knows that sometimes, specific people or situations need a bit of flexibility. Here are the key types of exemptions:
+
+First, Usernames: It’s like having a VIP list. If a request comes from certain users – think of them as trusted individuals in your Kubernetes world – PSA steps
+aside and lets them through without the usual checks. These could be system administrators or automated processes that you know are safe.
+
+Second, RuntimeClassNames: This is for those special types of Pods that need to run in a unique way, maybe for performance or compatibility reasons.
+When they have a particular runtime class name, they’re like guests with a special pass, exempt from the usual security checks.
+
+Finally, the Namespaces: Sometimes, you have entire sections of your Kubernetes cluster where the standard rules don’t apply. In these ‘exempt namespaces,’ Pods can
+operate with more freedom, outside the usual security boundaries.
+
+Now, how do you set these exemptions up? When configuring your Kubernetes API server, you can directly program these special passes into the PSA admission controller.
+It’s like giving the security guard a list of exceptions right from the start.
+
+But there’s another way too. In the world of Kubernetes, you also have something called a Validating Webhook. Here, you can define exemptions in a more flexible way,
+using a Kubernetes ConfigMap resource. Think of this like a digital file that contains all the special rules and exemptions.
+This file is then placed right inside the ‘pod-security-webhook’ container, like handing over a constantly updating list of exceptions to your security guard.
+
+In both cases, whether it’s directly through the API server or via the Validating Webhook, you’re ensuring that your Kubernetes cluster
+remains secure while also being flexible enough to accommodate special cases and needs.
+
+And that, in a nutshell, is how PSA uses exemptions to maintain a balance between strict security and necessary flexibility in a Kubernetes environment.
+Migration Strategies: From PSP to PSA
+
+let’s talk about moving from PodSecurityPolicy to Pod Security Admission in Kubernetes. It’s a bit like updating your software – you want to make
+sure everything runs smoothly without disrupting your work.
+
+First things first, understand what you currently have. It’s like taking inventory. Look over your existing PSPs and note down what security policies you’ve got in place.
+This is your starting point.
+
+Next up, get to know PSA. It’s important to understand how it works. PSA has three levels – Privileged, Baseline, and Restricted.
+Think about which level fits best with your current PSPs. It’s like choosing the right tool for the job.
+
+Time for a test run with PSA in Audit Mode. Here, you’re just observing, not making any changes. Turn on PSA and see how your policies would work in real-time.
+It’s a bit like a dress rehearsal.
+
+Now, translate your old PSPs into PSA policies. You’re basically updating your security measures. Find the closest match in PSA for each PSP,
+ or write a new policy if you need to.
+
+Before you go all in, use PSA in Warn Mode. This way, you’ll get alerts for any issues, but it won’t stop anything from running.
+ It’s like having a friendly reminder before you make a big change.
+
+Keep an eye on things. Monitor your audit and warning logs. This helps you see if there are any issues you need to fix. Think of it as fine-tuning your setup.
+
+Ready to enforce your new policies? Switch from audit to enforce mode in PSA. Now, your policies are not just for show; they’re actually in effect.
+
+Take it slow. Don’t rush into enforcing everything at once. Start with one area at a time, like focusing on a specific part of your project.
+This way, you can manage the changes better.
+
+Keep everyone in the loop. Make sure your team knows about the new policies and how they work. Good communication is key to a smooth transition.
+
+And lastly, don’t forget your resources. The Kubernetes documentation, blog posts, and GitHub repository are great places to look for more detailed information.
+ They’re like your go-to guides.
+
+By following these steps, you can switch from PSP to PSA with as little disruption as possible, keeping your Kubernetes environment secure and up-to-date.
+Let’s see Pod Security Standards in Action.
+
+Here are practical examples of how different Pod Security Standards can be applied to a hypothetical pod spec:
+
+First, the Privileged Level is appropriate for workloads that require all capabilities and access to the host.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged-pod
+spec:
+  containers:
+  – name: privileged-container
+    image: nginx
+    securityContext:
+      privileged: true
+
+Second, the Baseline Level, which is the default for most clusters, disallows privilege escalation.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: baseline-pod
+spec:
+  containers:
+  – name: baseline-container
+    image: nginx
+    securityContext:
+      allowPrivilegeEscalation: false
+
+Finally, Restricted Level for workloads that require the highest level of security.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: restricted-pod
+spec:
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  – name: restricted-container
+    image: nginx
+    securityContext:
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+
+In a real-world world scenario,
+
+A container that needs to manage the host’s network stack might require privileged access.
+
+An API server that needs limited security permissions without escalation privileges would fit into baseline policies.
+
+A payment processing app that handles sensitive data would benefit from the restricted level to minimize the attack surface.
+
+Always refer to the latest Kubernetes documentation when implementing these examples, as details may have changed since my last update.
+
+IQ:
+
+We have provided an AdmissionConfiguration resource manifest at the /root location with name admission-configuration.yaml.
+
+Inspect the manifest file and select the correct statement on enforced policies and the restricted levels in the provided AdmissionConfiguration resource.
+
+Reference:
+https://kubernetes.io/docs/tasks/configure-pod-container/enforce-standards-admission-controller/#configure-the-admission-controller
 
 
