@@ -5128,3 +5128,53 @@ Since this uses middleman, the latency of the app will be high and cpu useage..
 
 
 kata Containers:
+another sandboxing tool for containers, it takes a diff approach when compared to gvisor.
+
+Runtime Classes:
+making use of gvisor and kata containers to deploy containerid applications.
+docker run -d nginx -->
+This will create an instance of an nginx application.
+what happens under the hood when the docker run -d nginx is ran?????????????
+
+1. The docker cli converts the query to restful api and passes this to the docker daemon
+2. docker daemon on receiving the instructions, checks if the image exists on the local system if it does not exist.
+it downloads the image from the docker registry, the default been dockerhub, once the image is downloaded, it makes a call to containerd to start the container..
+3. containerd is responsible for converting the image into an oci compliant bundle, it then passes the oci compliant image bundle to the containerd shim.
+3. The containerd shim calls the runC to start the container.
+4. runC then interacts with the namespace and cgroups on the kernel to create or starts the container..
+
+runC is the default component in charge of creating the conatiners..
+NB:
+We can run any container using any of the runtime since theyre oci compliant
+gvisor runtime --> runsc
+kata runtime --> kata or kata-runtime
+ex:
+docker run -d --runtime kata nginx
+docker run -d --runtime runsc nginx
+
+
+Using Runtimes in Kubernetes:
+using specific runtimes in creating k8s pods...
+say we have gvisor installed in our k8s nodes, lets see ways to instruct k8s to run our pods using runsc which is gvisor runtime..
+refernce :
+https://kubernetes.io/docs/concepts/containers/runtime-class/
+1. we create an object called runtimeclass
+ex:
+# RuntimeClass is defined in the node.k8s.io API group
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  # The name the RuntimeClass will be referenced by.
+  # RuntimeClass is a non-namespaced resource.
+  name: myclass #any name but must be provided to the pod
+# The name of the corresponding CRI configuration
+handler: myconfiguration # runsc or kata or runc
+
+2. create a pod definition file and pass the option runtimeClassName in the spec.runtimeClassName and give the name of the runtimeclass you created in 1.
+
+verify after creating the pod to check if the nginx process is running on the host..
+pgrep -a nginx --> run this on the node.. you will notice the process cant be found on the host
+pgrep -a runsc
+
+
+One way SSL vs Mutual SSL
