@@ -5098,3 +5098,33 @@ Sandboxing: In terms of security, any technique that isolates something from the
 Every tool or techniques we choose in security has its adv and disadv, we have to choose and work with what works for us in a specific scenario
 
 gVisor:
+Using gvisor to acheive sandboxing..
+The linux kernel is very complex..It can power an application that is streaming a music video and it can also power a rocket to the moon...
+It allows applications makes 1000s of syscalls as much as this is good, its not as good when keeping security in mind..
+Able to interact with the kernel freely increases the attack surface and these can be exploited by hackers as new vulnerabilities arises often
+
+The whole problem here in a multi tenant environment is not what an app can do and cannot do but the core problem is that they all interact with the same os and the same kernel.
+we want a way to improve isolations bw container to container and bw container and the os or the kernel...
+what if we can restrict a container further by restricting it from making direct syscalls to the linux kernel?
+like having an additional layer of security/protection bw the container and the linux kernel? we will acheive this using gvisor......
+
+gvisor is a tool from google that introduces addition layer of protection/isolation bw the container or application and the kernel.
+
+How does it work?
+When implemented, when an application wants to make a syscall to the kernel, it makes that call to gvisor.
+How does this helps improve container isolation?
+gvisor has 2 major component that works 2geda to acheive stronger isolations when compared with traditional containers...
+1. sentry: an independent application level kernel dedicated for containers, its purpose is to intercept syscalls made by containerized applications.
+If an application requires access to files or devices, sentry cannot make an actual calls directly to the linux kernel, it only intercepts it.. and talks to
+a dedictaed process called gofer.. gofer is a file proxy that implements logic that is needed by containerized apps to access the system files..
+Also for network operations, gvisor makes use of its own network stacks, this makes sure networking operations can be done without containers directly
+interacting with the os network code..
+
+Important: It is not one gvisor doing all of this, each containerid application has its own gvisor implemeting these isolation measures...acting as a middleman.
+bw the container and the linux kernel.. each app will be isolated in it sandbox, drastically reducing the attack surface..
+
+Lapses, not all app works with it, you have to test your app and see if that works for you....
+Since this uses middleman, the latency of the app will be high and cpu useage..
+
+
+kata Containers:
