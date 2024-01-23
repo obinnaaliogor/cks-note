@@ -4902,3 +4902,199 @@ Reference:
 https://kubernetes.io/docs/tasks/configure-pod-container/enforce-standards-admission-controller/#configure-the-admission-controller
 
 
+
+Open Policy Agent (OPA)
+Lets say we have a service where users connect to order their product..
+When it comes to security, we know that the communication bw the services and the users have to be secured. The users must have the permission to access the web portal,
+order, view their cart and make new purchases.
+There are multiple phases in security, one is where to user has to be authenticated, and the other communication bw services which is acheived using certificates.
+OPA has nothing to do with authentication, and certificates.. OPA deals with Authorization.
+Once the user is authenticated, what action can they perform or do is handled by OPA.
+what areas of the application is the user allowed to access? these are handled by OPA, what action can they perform on the application? OPA says this..
+
+LETS LOOK AT AN APPLICATION CODE THAT HANDLES AUTHORIZATION WITHOUT OPA, A SIMPLE PYTHO FLASK APPLICATION.
+Creating a simple Python Flask application that handles authorization without using Open Policy Agent (OPA) can be done by implementing the
+authorization logic directly in the application code.
+ Below is a basic example to illustrate how this can be accomplished.
+
+ from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+# Authorized username
+AUTHORIZED_USER = "john"
+
+@app.route('/')
+def home():
+    auth = request.authorization
+    if not auth or auth.username.lower() != AUTHORIZED_USER:
+        return jsonify({"error": "Unauthorized"}), 401
+    return "Welcome to the homepage, John!"
+
+if __name__ == '__main__':
+    app.run(debug=True)
+When you have various applications and services built in python,java and many more languages. youll have to right the authorization logics in all of this.
+This are what OPA helps us resolve..
+How does it work?
+You deploy OPA in your environment and configure it. configure policies in it and all services reach out to OPA for authorizing the request instead of implemeting it in the code.
+OPA then validates the requests and returns a allow or deny response.
+
+DEPLOYING OPA:
+Download the binaries and run opa as a service.
+https://www.openpolicyagent.org/docs/latest/#running-opa
+
+Install OPA as a service On Linux (64-bit):
+
+curl -L -o opa https://openpolicyagent.org/downloads/v0.60.0/opa_linux_amd64_static
+# Find the given version of OPA from the release page.
+export VERSION=v0.38.1
+curl -L -o opa https://github.com/open-policy-agent/opa/releases/download/${VERSION}/opa_linux_amd64
+
+chmod 755 ./opa
+
+./opa run -s &
+
+by default OPA runs on port 8181 and authentication and authorization are disabled by default..
+app logic:
+@app.route('/home')
+def hello_world():
+   user = request.args.get("user")
+   if user != "john":
+        return 'Unauthorized', 401
+   return 'Welcome Home!', 200
+
+
+Create a policy
+example.rego:
+package httpapi.authz
+# HTTP API Request
+import input
+default allow = false
+allow{
+	input.path == "home"
+	input.user == "john"
+}
+The next is to load a policy on OPA, therefore you have to create a policy for OPA called policy.rego or example.rego
+curl -X PUT --data-binary @example.rego http://localhost:8181/v1/policies/example1
+where example.rego is the policy name prefixed with @
+
+View existing policies, view the v1 api
+curl http://localhost:8181/v1/policies
+
+
+Modify your application code to now query the OPA api for authorization of the user john as follows:
+from flask import Flask, request
+import requests
+
+app = Flask(__name__)
+
+OPA_URL = "http://localhost:8181/v1/data/httpapi/authz"
+
+@app.route('/home')
+def hello_world():
+    user = request.args.get("user")
+    input = {
+        "path": "/home",
+        "user": user
+
+	}
+
+
+Reference links
+
+Below are some references:
+
+How Netflix Is Solving Authorization Across Their Cloud [I] – Manish Mehta & Torin Sandall, Netflix
+
+https://www.youtube.com/watch?v=R6tUNpRpdnY
+
+OPA Deep Dive
+
+https://www.youtube.com/watch?v=4mBJSIhs2xQ
+OPA goal is to unify policy management and enforcement accross the entire IT stack.
+The way you decouple storage and move it into database.
+OPA tends to acheive decoupling of authorization(policy) from application logic and move it to OPA.
+https://www.openpolicyagent.org/docs/latest/kubernetes-tutorial/
+
+
+
+
+OPA in Kubernetes
+This is using the gatekeeper approach:
+Reference: https://open-policy-agent.github.io/gatekeeper/website/docs/install
+OPA constraints framework: what, where and how?
+1. what requrement do i have
+2. where do i enforce the requirement
+3. how do i specify what to check and what action to take.
+ex:
+1. what requrement do i have
+I want all object in the namespace "expensive" to have a billing label
+
+2. where do i enforce the requirement
+I want this to be enforced on a kubernetes admission controller.
+
+3. how do i specify what to check and what action to take.
+Get the labels of the new object in the "expensive" namespace and make sure it has billing as label.
+target
+target: admission.k8s.gatekeeper.sh
+
+IQ:
+As you can see in previous step, you were able to create resources without any enforcements and this might lead to several
+challenges and potential issues within a Kubernetes environment.
+
+With OPA Gatekeeper, you can best practices and organizational conventions for your resources in your kubernetes cluster.
+
+For example, you can enforce policies like:
+
+    All namespaces must have a label that lists a point-of-contact
+    All images must be from approved repositories
+    All pods must have resource limits
+
+IQ:
+In previous step, you created a pod as per your team requirement but there might be instances where you might
+miss adding labels to the pods. In order to enforce these rules, we use OPA Gatekeeper.
+
+For this step, create an ConstraintTemplate with name k8srequiredlabels with target admission.k8s.gatekeeper.sh and using the following rego.
+REF: https://open-policy-agent.github.io/gatekeeper/website/docs/howto/
+
+cat 2.yaml
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: require-tech-label
+spec:
+  match:
+    namespaces: ["engineering"]
+  parameters:
+    labels: ["tech"]
+
+
+Manage Kubernetes secrets:
+
+Demo: Encrypting Secret Data at Rest
+REF:
+https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/
+
+
+Important: Generate a 32-byte random key and base64 encode it. You can use this command:
+head -c 32 /dev/urandom | base64
+You can use /dev/hwrng instead of /dev/urandom if you want to use your PC's built-in hardware entropy source. Not all Linux devices provide a hardware random generator.
+
+note: ciphers, falco --> read..
+
+
+Container Sandboxing:
+How to improve isolations in containers using sandboxing techniques...
+Every vm is deployed ontop of a physical infrastructure with sufficient cpu,ram available at its disposal..
+hardware --> OS --> Hypervisor --> vm1 vm2 and allocating several cpu,ram as needed.
+Every container on the host, makes syscalls to the same kernel to work properly unlike the vm that has separate kernels.
+
+Important: How the dirty COW cve can be used to break out of the container and into the host.
+A compromised container can create a backdoor entry into the host.. a huge security risk as private information stored on the host can now be leaked by the attacker..
+
+Sandboxing: In terms of security, any technique that isolates something from the rest of the system is known as sandboxing..
+
+Every tool or techniques we choose in security has its adv and disadv, we have to choose and work with what works for us in a specific scenario
+
+gVisor:
