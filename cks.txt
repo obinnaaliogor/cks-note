@@ -5231,3 +5231,238 @@ I hope to make a lecture on these in the future.
 
 
 Supply Chain Security
+
+Minimize base image footprint:
+The base image is any image that is built from scratch
+ex:
+FROM scratch
+however, we generally refer to the parent image as the base image.
+ex:
+FROM debian:slim-buster
+Inveriablly, we will refer any image uppon which our image is built as the base image..
+
+Best Practices in building images:
+1. Do not build images that contains multiple applications such as database, webserver and other services all into one imgae.
+2. Build images that are moduler and that solves one specific problem. images for db, images for webserver etc and each image having its own dependency without having to
+worry about the other application..
+These images can when deployed as containers can scale individually without having to worry about the other containers..
+3. do not store data or state inside the container b/c containers are ephemiral, we should be able to destroy them and bring them up as wishes without a loss of data.
+store data in external volume or via in memory db like redis.
+
+Choosing a base image:
+1. you have to look for images that suits your technical needs..
+ex:
+if your building a httpd application, you use a httpd base image and nginx app you utilize an nginx base images..
+say my app requires a httpd image..
+i lookup to dockerhub for the httpd base image, check the verified authenticity tag on the image to ensure its from official sources.
+the image must be upto date..
+- minimize the size of the image, this will make sure the images are pulled faster from remote repositories...
+- only install necessary Packages
+- delete and clean up shells,package managers (yum,apt etc) and unwanted tools.
+- do not add tmpfiles to the image...
+- remove tools like curl or wget that could be used by an attacker to download files and query data if they where to gain access to the container..
+- maintain diff images for diff environment
+- if you have needs for debug tools and other tools that are required for development, this shouldnt be part of production instances..
+do not include those tools in production images..
+- use multi-stage to built lean production ready images
+ex:
+google distroless images:
+they contain only the application and their runtime dependencies
+does not contain package managers, shell, network tools, text editor or other unwanted programs..
+https://github.com/googlecontainertools/distroless
+
+vulnerability scanning:
+a minimal image is less vulnerable to attack, the few packages there are in an image the fewer the vulnerabilities.
+
+
+Image Security:
+Refer:
+https://kubernetes.io/docs/concepts/containers/images/
+Make your repository private so it can be accessed using a set of credentials..
+1 login to the repo
+2. docker run --name myapp -d my-private-reg/<username>/image:tag
+
+https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+to use an image from private registry in k8s use:
+ex:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: private-reg
+spec:
+  containers:
+  - name: private-reg-container
+    image: <your-private-image>
+  imagePullSecrets:
+  - name: regcred
+---
+
+Whitelist Allowed Registries – Image Policy Webhook
+as a user with accesss to the kubernetes cluster, i can deploy any application as a form of pod in the cluster...
+i can utilize any image in the application without restrictions, hackers can gain access to the cluster via the image and break out of the application to the host and
+damage the infrastructure or get secrets information from the host..
+It is good to have governance in place so that images are pulled from approved Registries only..
+implementation.
+1. use the admission controller by deploying a admission webhook server,secret, logic and service and deploy a validating webhook to make a call to the webhook server to validate
+if the deployment has the image from our required or specified registry.
+2. is to deploy OPA and create rego policy that will load to opa and let OPA handle the validation based on the statement in the policy.
+3. Configure a built in admission controller known as imagePolicyWebhook..
+for this we deploy a webhook server and configure the imagePolicyWebhook admission controller to talk to the webhook server using an admission configuration file..
+Reference:
+https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/
+apiVersion: apiserver.config.k8s.io/v1
+kind: AdmissionConfiguration
+plugins:
+  - name: ImagePolicyWebhook
+    configuration:
+      imagePolicy:
+        kubeConfigFile: <path-to-kubeconfig-file>
+        allowTTL: 50
+        denyTTL: 50
+        retryBackoff: 500
+        defaultAllow: true
+
+#kubeConfigFile: <path-to-kubeconfig-file> This is the kubeconfig file the imagePolicyWebhook admission controller will use to communicate with the webhook server..
+The ImagePolicyWebhook config file must reference a kubeconfig formatted file which sets up the connection to the backend.
+It is required that the backend communicate over TLS.
+
+The kubeconfig file's cluster field must point to the remote service, and the user field must contain the returned authorizer.
+ex:
+# clusters refers to the remote service.
+clusters:
+  - name: name-of-remote-imagepolicy-service
+    cluster:
+      certificate-authority: /path/to/ca.pem    # CA for verifying the remote service.
+      server: https://images.example.com/policy # URL of remote service to query. Must use 'https'.
+
+# users refers to the API server's webhook configuration.
+users:
+  - name: name-of-api-server
+    user:
+      client-certificate: /path/to/cert.pem # cert for the webhook admission controller to use
+      client-key: /path/to/key.pem          # key matching the cert
+to enable the admssion controller imagePolicyWebhook add this as an option to the kube-apiserver... using --enable-admission-plugin also
+This configuration file should be provided to the API server's command line flag --admission-control-config-file:
+hands on
+-------------
+IQ:
+For this lab we are going to deploy a ImagePolicyWebhook which will deny us from using images with latest tag and ensure that all images have tags.
+
+The Git Repo for the simple webhook endpoint server we are using for this lab can be found in the link above the terminal.
+cat image-policy-webhook.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: image-bouncer-webhook
+  name: image-bouncer-webhook
+spec:
+  type: NodePort
+  ports:
+    - name: https
+      port: 443
+      targetPort: 1323
+      protocol: "TCP"
+      nodePort: 30080
+  selector:
+    app: image-bouncer-webhook
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-bouncer-webhook
+spec:
+  selector:
+    matchLabels:
+      app: image-bouncer-webhook
+  template:
+    metadata:
+      labels:
+        app: image-bouncer-webhook
+    spec:
+      containers:
+        - name: image-bouncer-webhook
+          imagePullPolicy: Always
+          image: "kainlite/kube-image-bouncer:latest"
+          args:
+            - "--cert=/etc/admission-controller/tls/tls.crt"
+            - "--key=/etc/admission-controller/tls/tls.key"
+            - "--debug"
+            - "--registry-whitelist=docker.io,registry.k8s.io"
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/admission-controller/tls
+      volumes:
+        - name: tls
+          secret:
+            secretName: tls-image-bouncer-webhook
+
+controlplane ~ ➜  k get secrets
+NAME                        TYPE                DATA   AGE
+tls-image-bouncer-webhook   kubernetes.io/tls   2      4m40s
+---
+Note: registry-whitelist defines the whitelisted(allowed) registry that can be used by our pods.
+--
+ cat /etc/kubernetes/pki/admission_kube_config.yaml
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    certificate-authority: /etc/kubernetes/pki/server.crt
+    server: https://image-bouncer-webhook:<NODE_PORT>/image_policy
+  name: bouncer_webhook
+contexts:
+- context:
+    cluster: bouncer_webhook
+    user: api-server
+  name: bouncer_validator
+current-context: bouncer_validator
+preferences: {}
+users:
+- name: api-server
+  user:
+    client-certificate: /etc/kubernetes/pki/apiserver.crt
+    client-key:  /etc/kubernetes/pki/apiserver.key
+
+---
+ cat /etc/kubernetes/pki/admission_configuration.yaml
+apiVersion: apiserver.config.k8s.io/v1
+kind: AdmissionConfiguration
+plugins:
+- name: ImagePolicyWebhook
+  configuration:
+    imagePolicy:
+      kubeConfigFile: <PATH_TO_KUBECONFIG>
+      allowTTL: 50
+      denyTTL: 50
+      retryBackoff: 500
+      defaultAllow: false
+---
+Enable the ImagePolicyWebhook admission controller as final step so that our image policy validation can take place in API server.
+You need to specify admission-control-config-file as well for this controller
+
+-
+
+admission-control-config-file: /etc/kubernetes/pki/admission_configuration.yaml
+
+Note: Once you update kube-apiserver yaml, please wait for a few minutes for the kube-apiserver to restart completely.
+
+
+Important:
+    When you define the /image_policy endpoint in your webhook server configuration (in image-policy-webhook.yaml), you are telling Kubernetes to send admission
+	review requests to this endpoint
+	whenever there's a pod creation or update operation.
+
+    When a pod creation or update operation occurs in your cluster, Kubernetes sends an admission review request to the /image_policy endpoint of your webhook server,
+	including information about the pod being created or updated.
+
+    Your webhook server, which is responsible for enforcing image policies, receives this request and processes it. It checks the container images used
+	in the pod against the defined image policy rules, such as checking for allowed registries, allowed tags, or other criteria.
+
+    Based on the image policy rules, your webhook server responds to Kubernetes with an admission review response.
+	This response can be either "allowed" or "denied" based on whether the pod complies with the defined policies.
+
+    Kubernetes uses the admission review response to decide whether to admit or reject the pod creation/update request.
+	If the response is "allowed," the pod is admitted; if it's "denied," the pod is rejected.
+
+Use static analysis of user workloads (e.g.Kubernetes resources, Docker files)
