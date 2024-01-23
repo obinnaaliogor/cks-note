@@ -5178,3 +5178,56 @@ pgrep -a runsc
 
 
 One way SSL vs Mutual SSL
+In a one way tls the client verifies that the server is who they say they are but the server does not verify the client authenticity.
+
+2. mutual tls --> in this case the clinet and server verifications process and established, the client verifies that the server is who they say they are and the server verifies
+that the client is who they say they are..
+
+
+Implement pod to pod encryption by use of mTLS
+using mtls to secure pod-pod communication in the k8s cluster..
+Pod A and pod b
+Pod A want to securly communicated to podB via mtls...
+Pod A sends a requests to pod B and retrieves podB public certificates and key
+Pod A verifies the public certificate it received from B with the CA as all CA public cert is in the clients browser..
+Pod A validates that pod B is who it says it is and encrypt its symmetric key with Pod B public key and sends it to pod B.
+pod B receives this key and cert from A decrypts it with his private key and verifys pod A key and cert with the CA once it validates it..
+All future comm can now be done using the symmetric keys.
+
+How can we manage this with interpods comm with 100s of pods comm with each other.
+who manages this? how can we acheive this?
+1. we can let the applications running in the pods encrypt the msgs themselves
+This is not very good since we have diff app say mysql, apache etc.. If we let these app implements this themselves, theres not gurantee that theyll use the same
+algorithm for the encryption which will be a headache..
+
+Better option, we let applications comm unencrypted and use other options to encrypt there communications...
+istio and linkerd are 2 3rd party tool that implement mtls comm bw pods..
+they also connect multiple Microservice together in a multi tier architecture.. This is know as service mesh
+
+
+Article – Note on Secrets
+
+Remember that secrets encode data in base64 format. Anyone with the base64 encoded secret can easily decode it. As such the secrets can be considered not very safe.
+
+The concept of safety of the Secrets is a bit confusing in Kubernetes. The kubernetes documentation page and a lot of blogs out there refer to secrets as a
+“safer option” to store sensitive data. They are safer than storing in plain text as they reduce the risk of accidentally exposing passwords and other sensitive data.
+In my opinion it’s not the secret itself that is safe, it is the practices around it.
+
+Secrets are not encrypted, so it is not safer in that sense. However, some best practices around using secrets make it safer. As in best practices like:
+
+    Not checking-in secret object definition files to source code repositories.
+    Enabling Encryption at Rest for Secrets so they are stored encrypted in ETCD.
+
+Also the way kubernetes handles secrets. Such as:
+
+    A secret is only sent to a node if a pod on that node requires it.
+    Kubelet stores the secret into a tmpfs so that the secret is not written to disk storage.
+    Once the Pod that depends on the secret is deleted, kubelet will delete its local copy of the secret data as well.
+
+Read about the protections and risks of using secrets here
+
+Having said that, there are other better ways of handling sensitive data like passwords in Kubernetes, such as using tools like Helm Secrets, HashiCorp Vault.
+I hope to make a lecture on these in the future.
+
+
+Supply Chain Security
