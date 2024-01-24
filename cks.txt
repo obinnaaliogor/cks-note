@@ -5466,3 +5466,91 @@ Important:
 	If the response is "allowed," the pod is admitted; if it's "denied," the pod is rejected.
 
 Use static analysis of user workloads (e.g.Kubernetes resources, Docker files)
+With static analysis, we develop the definition files and review the files and enforce policys earlier in the development circle b4 it is pushed to the cluster..
+kubesec from controlplane https://kubesec.io is a tool that can help us with this..
+kubesec analysis resource definitions and score them and reports critical issues that where found in it..
+
+Installation:
+kubesec is installed as a binary.
+usage:
+kubesec scan <file.yaml>
+
+
+1. Start the HTTP server in the background
+kubesec http 8080 &
+Use curl to POST a file to the server
+curl -sSX POST --data-binary @test/asset/score-0-cap-sys-admin.yml http://localhost:8080/scan
+
+2. Use curl to POST a file to the external kubesec server
+curl -sSX POST --data-binary @test/asset/score-0-cap-sys-admin.yml https://v2.kubesec.io/scan
+
+wget https://github.com/controlplaneio/kubesec/releases/download/v2.13.0/kubesec_linux_amd64.tar.gz
+tar -xvf  kubesec_linux_amd64.tar.gz
+mv kubesec /usr/bin/
+
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/root/.kube/plugins/scan
+
+
+Scan images for known vulnerabilities (Trivy):
+We scan images and make sure they do not have vulnerabilities that attackers can easily exploit..
+we have to understand what cve is, cve stands for common vulnerabilities and exposure..
+computer code is not perfect, when the bad guys finds these bugs they use it to abuse the system...
+when the good guys finds it, they report it..
+https://cve.mitre.org
+we need a central database so that anyone can submit issues when they finds it....
+this makes it easier to inform users of vulnerabilities, record them and avoid duplication.
+each cve gets unique identifier...
+you can lookup the database for unknown bugs of an application and perform remmediations...
+
+NB: Any thing that can allow an attacker bypass security briges and do things he or she isnt allowed to do
+ex:
+view employees payroll, using basic credentials to escalate priviledge
+, is a bug and can enter cve database..
+- each cve gets a severity score 0..10
+low
+medium
+high
+critical
+
+the above score will help us on what to Prioritize first..
+if we see a score of 9.5 or critical, youll understand that its a problem we should deal with urgently..
+
+we have lots of processes,applications running as containers..
+we are told not to install unwanted packages..
+how can we determine the severity of packages to reduce the attack surface?
+we use cve scanners....the scanners scans the applications and tells you the vulnerabilities they have....
+say we have an nginx version 1.14 with known vulnerabilities, you can use cve scanners to get the level of vulnerabities and then solve the issue by upgrading to a higher version
+with less vulnerabilities..
+the more packages you have in your system, the higher the vulnerabilities..
+
+trivy from aquasecurity is a vulnerabilities scanner..
+for containers, cicd piplines integration etc..
+usage:
+install the package:
+run trivy image <imagename> to scan for vulnerabilities in the image....
+run; trivy image --severity CRITICAL <imagename> --> displays only cve of critical score
+run; trivy image --severity CRITICAL,HIGH <imagename> --> displays only cve of critical and high score
+
+for cve we can immediatly fix by upgrading vulnerable packages run
+run; trivy image --ignore-unfixed <imagename> --> displays only cve that can be fixed by a simple package upgrade
+
+Reference:
+https://aquasecurity.github.io/trivy/v0.48/docs/
+
+ex:
+docker save nginx:14 > nginx.tar
+run trivy image --input nginx.tar to scan for vulnerabilities in the image....
+
+example of 2 images:
+
+nginx:1.18.0 and nginx:1.18.0-apline
+
+A scan of both images will show that the first has 155 cve and the last has 0
+This shows that the less the image the lesser the attack surface..
+we must trim down all unnecessary packages in building images...
+
+BEST Practices
+------
+
+
+
