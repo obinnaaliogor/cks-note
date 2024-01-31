@@ -5930,3 +5930,216 @@ https://falco.org/docs/rules/supported-fields/
 https://falco.org/docs/rules/default-macros/
 
 https://falco.org/docs/configuration/
+
+
+Mutable vs Immutable Infrastructure
+To understand the concept of immutability we use:
+1.Consider and nginx running version v1.17 on the host.. when a new version of nginx is released, we upgrade the software running on the server.
+from v1.17 to v1.18 and the to v1.19, this can be done by dowloading the version of nginx and upgrade it manually or by the use of script, ansible
+playbook to do this on all host...
+2. Lets say for high availabilty we have 3 or more nodes running the same software and codes..we will have to use the same update software lifecycle
+for each of the server using the same approach as the previous server. This type of update is known as inplace update..
+This is b/c the underlying infrastructure remains the same but the softwares and configuration running in the machine has been changed. This practice is called MUTABLE Infrastructure.
+Its a huge task carrying out update, a lot of dependencies has to be met b4 carrying out an upgrade..
+Say we have 3 servers as described above that should be updated from nginx v1.18 to v1.19, the upgrade went successful to v1.19 for 1,2 servers and fails for the last server.
+The failure could due to a number of reasons, network issues, diff version of os, compute issues etc.
+This kind of outcome will result into inconsistency in your infrastructure and its known as configuration drift.. This can leave infrastructure in a complex state making it
+difficult to plan and carry out future update.. troubleshooting will prove to be a complex task as each server will now be slight diff from the rest of the pool of servers.
+
+Instead of following the above approach, we can spin up a new server with the newer version of the nginx software say v1.19 and decommission the old ones.
+Once the update goes through the old servers are deleted "decommissioned" This approach is known as "Immutable Infrastructure" something you cannot change.
+This means we cannot carry out inplace update of resources anymore..
+The same goes for containers, they are designed keeping immutability in mind..
+EX:
+In containers, for making changes to the applications, this changes should be first made in the image.. which should then be used to spin up new containers..
+For example, to upgrade from nginx 1.18 to 1.19 we change this in the Dockerfile and rebuild the image..and using rolling update in k8s we deploy the new version of
+our app without causing downtime..
+
+a sample Dockerfile:
+# Use Nginx 1.18 as the base image
+FROM nginx:1.18
+
+# (Optional) Copy custom configuration file into the container
+# COPY nginx.conf /etc/nginx/nginx.conf
+
+# (Optional) Copy content into the container
+# COPY html/ /usr/share/nginx/html/
+
+# Expose port 80
+EXPOSE 80
+
+# Start Nginx when the container has provisioned.
+CMD ["nginx", "-g", "daemon off;"]
+
+
+------
+a sample Dockerfile:
+# Use Nginx 1.19 as the base image
+FROM nginx:1.19
+
+# (Optional) Copy custom configuration file into the container
+# COPY nginx.conf /etc/nginx/nginx.conf
+
+# (Optional) Copy content into the container
+# COPY html/ /usr/share/nginx/html/
+
+# Expose port 80
+EXPOSE 80
+
+# Start Nginx when the container has provisioned.
+CMD ["nginx", "-g", "daemon off;"]
+
+The above does not mean that the containers cannot be changed during runtime.. we can easily make changes to container if we want to..
+by defualt we can directly copy files to the rootfilesystem or shell into the container and make the required changes..
+ex:
+kubectl cp example.txt <namespace>/<pod-name>:/example.txt -c <container-name>
+this is not a good practice, an attacker can easily change the code on a running container and use it for malicious purpose..
+how can we prevent this from happening?
+
+Ensure Immutability of Containers at Runtime:
+making sure our k8s pods adheres to the concept of immutability..
+important: although containers are designed to be immutable by default, we can carry out inplace update on them..
+1. by copying files into the container
+2. by spawning a shell of the conatiners and making changes..
+how can this be prevented?
+1. ensure one cannot write into the filesystem when the pod is started using securityContext
+ex:
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx
+  name: nginx
+spec:
+  containers:
+  - image: nginx:1.18
+    name: nginx
+	#add this
+    securityContext: #added
+	  readOnlyRootFilesystem: true
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+The above will ensure that the nginx container will start with readonly on the root filesystem.
+This container will fail because nginx needs to write to 2 specific file in the / filesystem.
+Result of creating the pod:
+
+➜  ~ k get po
+NAME                                     READY   STATUS             RESTARTS      AGE
+log-parser-deployment-6ffc9c66d5-sxjkq   1/1     Running            0             3d3h
+log-parser-deployment-6ffc9c66d5-vbw26   1/1     Running            0             3d3h
+log-parser-deployment-6ffc9c66d5-vzb2v   1/1     Running            0             3d3h
+nginx                                    0/1     CrashLoopBackOff   3 (24s ago)   76s
+➜  ~
+➜  ~ k logs nginx
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: error: can not modify /etc/nginx/conf.d/default.conf (read-only file system?)
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2024/01/31 04:30:22 [emerg] 1#1: mkdir() "/var/cache/nginx/client_temp" failed (30: Read-only file system)
+nginx: [emerg] mkdir() "/var/cache/nginx/client_temp" failed (30: Read-only file system)
+
+------------------------------------
+
+Important: Since the nginx application needs to write to:
+1. /var/run --> PID Files: It often contains PID (Process ID) files, where running services write their process ID.
+ For example, when a server like Nginx or Apache starts, it often writes its main process's PID to a file in this directory (e.g., /var/run/nginx.pid).
+2. /var/cache/nginx/ --> his directory is used by Nginx for temporarily storing data for client requests.
+We can use emptyDir to mount this paths to the ngix container..
+Reference:
+  https://kubernetes.io/docs/concepts/storage/volumes/#emptydir
+
+We then have, granted nginx the filesystem it requires to function by making it that available via the emptydir volume on the container..
+
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx
+  name: nginx
+spec:
+  volumes: #added
+  - name: cache-volume
+    emptyDir:
+  containers:
+  - image: nginx:1.18
+    name: nginx
+    volumeMounts: #added
+    - mountPath: /var/cache/nginx/
+      name: cache-volume
+    - mountPath: /var/run/
+      name: cache-volume
+    securityContext:
+      readOnlyRootFilesystem: true
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+
+--------
+validate:
+1. Let try to install a package on the conatiner.
+we get this:
+k exec nginx -- apt-get update
+Reading package lists...
+E: List directory /var/lib/apt/lists/partial is missing. - Acquire (30: Read-only file system)
+command terminated with exit code 100
+
+2. let us copy files to the container by running.
+
+kubectl cp example.txt <namespace>/<pod-name>:/example.txt -c <container-name>
+this is not a good practice, an attacker can easily change the code on a running container and use it for malicious purpose..
+➜  ~
+➜  ~ k cp 1.yaml nginx:/1.yaml
+tar: 1.yaml: Cannot open: Read-only file system
+tar: Exiting with failure status due to previous errors
+command terminated with exit code 2
+
+Lets escalate the privileg on the container..
+Applying the definition file will make the application to run but will still not be able to write to the root filesystem since we still have the "readOnlyRootFilesystem"
+set to true..
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: nginx
+  name: nginx
+spec:
+  volumes:
+  - name: cache-volume
+    emptyDir:
+  containers:
+  - image: nginx:1.18
+    name: nginx
+    volumeMounts:
+    - mountPath: /var/cache/nginx/
+      name: cache-volume
+    - mountPath: /var/run/
+      name: cache-volume
+    securityContext:
+      readOnlyRootFilesystem: true
+	  priviledge: true #added
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+
+important:
+when containers are run as privileged mode, the swappiness value of the linux kernel on the host can be changed and more.
+➜  ~ k exec nginx -- cat  /proc/sys/vm/swappiness
+60
+this can be changed to 75
+k exec nginx -- echo "75" > /proc/sys/vm/swappiness once this is changed on the container, it automatically changes on the host cuz container relys on the host for that.
+---
+1. avoid running containers in privileged mode.
+2. do not set readOnlyRootFilesystem = false, set this as true and grant the application acess to the required directory it needs to write files to using mount volumes or
+by configuring and using appamore profile.
+doing the opposite of the above will break the immutability of the containers..
+3. runAsUser should not be set to 0 which is the root user.. stick to the principle of least privilge, PSS OR PSP, use imagePolicyWebhook.
+
+
+Use Audit Logs to monitor access:
+
