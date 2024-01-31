@@ -6140,6 +6140,201 @@ by configuring and using appamore profile.
 doing the opposite of the above will break the immutability of the containers..
 3. runAsUser should not be set to 0 which is the root user.. stick to the principle of least privilge, PSS OR PSP, use imagePolicyWebhook.
 
+Reference: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
 
 Use Audit Logs to monitor access:
+We where able to see how falco was able to detect suspecious activities in the container such as accessing sensitive files, spawning of the shell etc..
+How do we audit and monitor what is happening in our kubernetes cluster?
+Auditing allows cluster administrators to answer the following questions:
+    what happened?
+    when did it happen?
+    who initiated it?
+    on what did it happen?
+    where was it observed?
+    from where was it initiated?
+    to where was it going?
+	which namespace was it created in?
+	all these informations are called events in k8s.. auditing events will allow us detect suspecious behavior or anomalies in our kubernetes cluster.
+	Kubernetes provides auditing by default and this is handled by the kube-apiserver..
+
+	Looking at the diff stages that a request has to go through in the k8s cluster.
+	admin--> authentication ---> authorization --> admission controller --> creation of resources
+	Once the request is made to the kube-apiserver, it goes through what we call:
+	1. RequestReceived stage: at this stage, events are generated irrespective of the event been valid or not.
+	once the event is authenticated and validated another event is started called.
+	2. ResponseStarted: This is applicable to requests that takes sometime to complete such as the kubectl get pod --watch command that continously watch the state of the object.
+	3. ResponseComplete stage: Once a request is completed a response body is sent back at the stage.
+	4. Panic: In case of an invalid request or an error the request goes through the panic stage.
+
+	Each of these stages, RequestReceived, ResponseStarted, ResponseComplete and Panic generates events and can be recorded by the kube-apiserver..
+	However kubernetes does not do this by default, you have to configure it..
+
+	Before enabling audit, think about it, if we record every event that is generated in our cluster we will end up with 100s and 1000s of logs in our cluster.
+	This will be quit useless in what we want to acheive, what is the goal?
+	1. Our goal is to ensure only specific events are recorded..
+	such as only login and deletions of pods in a specific namespace..
+	2. how can we do this?
+	we will create a policy document that the apiserver will use to match specific events that will be logged.
+	we create a k8s resource as follows:
+
+apiVersion: audit.k8s.io/v1 # This is required.
+kind: Policy
+# Don't generate audit events for all requests in RequestReceived stage.
+omitStages:
+  - "RequestReceived"
+rules:
+  # Log pod changes at RequestResponse level
+  - level: RequestResponse
+    resources:
+    - group: ""
+      # Resource "pods" doesn't match requests to any subresource of pods,
+      # which is consistent with the RBAC policy.
+      resources: ["pods"]
+  # Log "pods/log", "pods/status" at Metadata level
+  - level: Metadata
+    resources:
+    - group: ""
+      resources: ["pods/log", "pods/status"]
+
+  # Don't log requests to a configmap called "controller-leader"
+  - level: None
+    resources:
+    - group: ""
+      resources: ["configmaps"]
+      resourceNames: ["controller-leader"]
+
+  # Don't log watch requests by the "system:kube-proxy" on endpoints or services
+  - level: None
+    users: ["system:kube-proxy"]
+    verbs: ["watch"]
+    resources:
+    - group: "" # core API group
+      resources: ["endpoints", "services"]
+
+  # Don't log authenticated requests to certain non-resource URL paths.
+  - level: None
+    userGroups: ["system:authenticated"]
+    nonResourceURLs:
+    - "/api*" # Wildcard matching.
+    - "/version"
+
+  # Log the request body of configmap changes in kube-system.
+  - level: Request
+    resources:
+    - group: "" # core API group
+      resources: ["configmaps"]
+    # This rule only applies to resources in the "kube-system" namespace.
+    # The empty string "" can be used to select non-namespaced resources.
+    namespaces: ["kube-system"]
+
+  # Log configmap and secret changes in all other namespaces at the Metadata level.
+  - level: Metadata
+    resources:
+    - group: "" # core API group
+      resources: ["secrets", "configmaps"]
+
+  # Log all other resources in core and extensions at the Request level.
+  - level: Request
+    resources:
+    - group: "" # core API group
+    - group: "extensions" # Version of group should NOT be included.
+
+  # A catch-all rule to log all other requests at the Metadata level.
+  - level: Metadata
+    # Long-running requests like watches that fall under this rule will not
+    # generate an audit event in RequestReceived.
+    omitStages:
+      - "RequestReceived"
+
+
+important:
+1. the omitStages is optional but once its defined the events of that stage will not be recorded.
+for instance we may decide not to record event for the RequestReceived stage in the policy, then we added it to the omitStages field.
+2. all the policy we want to match with events comes under the rules section.
+such as the namespace the objects are in, the type of operations to be logged, the robocity of the events etc..
+example:
+we want to record events if pods in the prod namespace are deleted.
+
+apiVersion: audit.k8s.io/v1 # This is required.
+kind: Policy
+# Don't generate audit events for all requests in RequestReceived stage.
+omitStages: ["RequestReceived"]
+rules:
+- namespaces: ["prod"]  --> if  a namespace is not stated it will default to all namespaces
+  resources: --> we can add multiple k8s object, like in RBAC
+  - groups: ""
+    resources: ["pods"]
+	verbs: ["delete"] --> if not specified every opxn such as create,delete etc will be logged...
+	resourceNames: ["webapp-pod"] --> specifying a specific pod, if not specified all delete events on all pods in the prod ns will be logged..
+ level: Request --> used to define the robocity of the log event..# Log configmap and secret changes in all other namespaces at the Metadata level.
+
+ #adding another rule
+ # A catch-all rule to log all other requests at the Metadata level.
+- level: Metadata
+    resources:
+    - group: "" # core API group
+      resources: ["secrets"]
+
+ The level field can accept 4 diff values,
+ 1. None --> means events will not be logged for the specific rule, if the pod gets deleted no event will be logged
+ summarily:
+     None - don't log events that match this rule.
+    Metadata - log request metadata (requesting user, timestamp, resource, verb, etc.) but not request or response body. The least verbose level that is available.
+    Request - log event metadata and request body but not response body. This does not apply for non-resource requests.
+    RequestResponse - log event metadata, request and response bodies. This does not apply for non-resource requests
+
+Reference:
+  https://kubernetes.io/docs/tasks/debug/debug-cluster/audit/
+-
+Having successfully created the audit policy, we can now update this in the kube-apiserver definition file or service options depending on how the apiserver was deployed.
+Enabling audit we need to configure an audit backend.
+
+two backends are supported:
+-------
+1. writing to stdout in a file.
+2. webhook such as exporting to falco service.
+
+FROM k8s docs:
+---------
+Configuration of Log backend:
+
+The log backend writes audit events to a file in JSONlines format. You can configure the log audit backend using the following kube-apiserver flags:
+
+    --audit-log-path specifies the log file path that log backend uses to write audit events. Not specifying this flag disables log backend. - means standard out
+    --audit-log-maxage defined the maximum number of days to retain old audit log files
+    --audit-log-maxbackup defines the maximum number of audit log files to retain
+    --audit-log-maxsize defines the maximum size in megabytes of the audit log file before it gets rotated
+
+If your cluster's control plane runs the kube-apiserver as a Pod, remember to mount the hostPath to the location of the policy file and log file,
+so that audit records are persisted. For example:
+
+  - --audit-policy-file=/etc/kubernetes/audit-policy.yaml
+  - --audit-log-path=/var/log/kubernetes/audit/audit.log
+
+then mount the volumes:
+
+...
+volumeMounts:
+  - mountPath: /etc/kubernetes/audit-policy.yaml
+    name: audit
+    readOnly: true
+  - mountPath: /var/log/kubernetes/audit/
+    name: audit-log
+    readOnly: false
+
+and finally configure the hostPath:
+
+...
+volumes:
+- name: audit
+  hostPath:
+    path: /etc/kubernetes/audit-policy.yaml
+    type: File
+
+- name: audit-log
+  hostPath:
+    path: /var/log/kubernetes/audit/
+    type: DirectoryOrCreate
+
+
 
