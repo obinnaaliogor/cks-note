@@ -470,7 +470,7 @@ Security:
 						apiserver.crt and apiserver.key
 
 						i. Also the apiserver is a client to the kubelet b/c it interacts with the kubelet with instructions to create a pod.
-						so we generate a set of certificate for it communicate with the kubelet.
+						so we generate a set of certificate for it to communicate with the kubelet.
 						apiserver-kubelet-client.crt and apiserver-kubelet-client.key
 
 						ii. Also the kube-apiserver is a client to the etcd cluster, b/c it interacts with the etcd to persist and retrive data.
@@ -487,12 +487,12 @@ Security:
 						kubelet-client.crt and kubelet-client.key
 
 						4. The scheduler communicates with the kube-apiserver to check for pod object that needs to be scheduled on a node.
-						Therefore the scheduler is a client to the kube-apiserver. so we generate a set of certificate for it communicate with the apiserver.
+						Therefore the scheduler is a client to the kube-apiserver. so we generate a set of certificate for it to communicate with the apiserver.
 						scheduler.crt and scheduler.key
 
 						5. The kube-controller-manager is a client to the kube-apiserver, it interacts with the kube-apiserver to monitor and manage the clusters resources, ensuring they conform to
 						the desired configuration and state.
-						so we generate a set of certificate for it communicate with the apiserver.
+						so we generate a set of certificate for it to communicate with the apiserver.
 						controller-manager.crt and controller-manager.key
 
 						6. The kube-proxy is another component who's a client to the kube-apiserver, it interacts with the kube-apiserver to get updates to changes in service configurations,
@@ -505,7 +505,7 @@ Security:
 
 
 						7. The admin user who will be accessing the cluster using the kubectl utility tool, needs a pair of certificate to interacts with the kube-apiserver.
-						  so we generate a set of certificate for it communicate with the apiserver.
+						  so we generate a set of certificate for it to communicate with the apiserver.
 						  admin.crt and admin.key
 
 						 8.  These various Certificates needs to be signed by the CA.So we generate a set of certificate for CA.
@@ -711,7 +711,7 @@ Security:
 						Create a certificate for the kubelet server, depending on the number of nodes in the cluster say node01 to 10th node.
 						You must name the certificate with the node prefix to differenciate it with the other cert in other nodes.
 						eg
-						1. We generate key for the admin user.
+						1. We generate key for the kubelet on node01.
 						openssl genrsa -out kubelet-node01.key 2048
 						output kubelet-node01.key
 
@@ -890,11 +890,11 @@ Things like the encoded csr.
 
 
 
-						  Important: The admin user creates this using the kubectl commands, the requests can be reviewed, approved, deny using the kubectl commands.
-						  The certificate is then extracted and shared with the user for authenticating into the k8s cluster....
+Important: The admin user creates this using the kubectl commands, the requests can be reviewed, approved, deny using the kubectl commands.
+The certificate is then extracted and shared with the user for authenticating into the k8s cluster....
 
 
-						  HOW IS IT DONE?????
+HOW IS IT DONE?????
 
 						  1. user generates key:
 						  openssl genrsa -out jane.key 2048
@@ -913,7 +913,7 @@ Things like the encoded csr.
  						 spec:
  						   request: <base64_encoded_csr>
  						   groups: <The group the user belongs to in linux eg system:masters or system:authenticated, theyre all list and should have -
- 						   usages:  ---> The use of the certificate, just for auth or gital signature or key encipherment. They all list and should have -, ?
+ 						   usages:  ---> The use of the certificate, just for auth or digital signature or key encipherment. They all list and should have -, ?
  						   - client auth
 
 
@@ -986,7 +986,7 @@ Things like the encoded csr.
 							We know that for anyone to sign certificate, they need the CA server root certificate and key.
 							Does the controller manager have these keys?
 
-							If you cat /etc/kubernetes/manifests/kube-controller-manager youll notice an option in the kube-controller-manager called
+							If you cat /etc/kubernetes/manifests/kube-controller-manager you'll notice an option in the kube-controller-manager called
 							--cluster-signing-cert-file=/etc/kubernetes/pki/ca.crt
 							--cluster-signing-key-file==/etc/kubernetes/pki/ca.key
 
@@ -1201,7 +1201,7 @@ Make sure that your Kubernetes cluster is up and running, and the kubectl config
 								The role and role binding objects falls under namespaces..
 								If you dont specify a namespace in the role and rolebinding objects, it will use the default namespace.
 								Which means the users associated to that role will only manage resources in the default namesapce.
-								Under the metadata section you can specify you can specify a namespace to grant the users access to a defined namespace.
+								Under the metadata section you can specify a namespace to grant the users access to.
 
 								AS A USER IN THE CLUSTER HOW CAN I KNOW IF I CAN MANAGE CERTAIN RESOURCES???
 								----------------------------------------------------------------------------
@@ -1306,14 +1306,10 @@ Make sure that your Kubernetes cluster is up and running, and the kubectl config
 								   rules:
 								   - apiGroups: [""]
 								     #
-								     # at the HTTP level, the name of the resource for accessing ConfigMap
-								     # objects is "configmaps"
 								     resources: ["persistentvolumes"]
 								     verbs: [ "get", "create", "delete"]
 								   - apiGroups: [storage.k8s.io]
 								     #
-								     # at the HTTP level, the name of the resource for accessing ConfigMap
-								     # objects is "configmaps"
 								     resources: ["storageclasses"]
 								     verbs: [ "get", "create", "delete"]
 								   ---
@@ -1405,7 +1401,7 @@ Here's an example of what the ClusterRole and ClusterRoleBinding might look like
 									 You create a service account and use the TokenRequest API to create a token with time bound for the service account.
 									 When that Service account or Token gets associated to a resource,machine or external apps that requires it they get authenticated into the cluster..
 
-									 NB: Authentication is differnt from authorization... You get authenticate first and then your role in the cluster gets defined using authorization mechanism.
+									 NB: Authentication is differnt from authorization... You get authenticated first and then your role in the cluster gets defined using authorization mechanism.
 
 									 To create a Kubernetes ServiceAccount and generate a token with an expiration using the TokenRequest API, you can follow these steps:
 
@@ -2042,7 +2038,7 @@ ACCESS THE KUBERNETES API-KUBECTL PROXY:
                             kubectl proxy
                             This will start the proxy at 127.0.0.1:8001, and it will allow you to access the Kubernetes API server from your local machine
                             This will start the kubectl proxy at 127.0.0.1:8001
-                            To list all available API versions:
+                            To list all available API and their versions:
                             curl localhost:8001/apis -k
 
                             To list the core API group:
@@ -2173,8 +2169,8 @@ This is a GUI of your running cluster, based on the authorization granted to a u
 and watch using the dashboard.
 
 Restricting access to the kubernetes dashboard is very essential in securing the cluster.
-In the earlier release of the k8s access to the k8s dashboard was not restricted.
-One is the cryptojacking attack on tesla, where an attachker gained access to it cluster through the kubernetes dashboard and used it to mine crypto currency.
+In the earlier release of the k8s, access to the k8s dashboard was not restricted.
+One is the cryptojacking attack on tesla, where an attacker gained access to it cluster through the kubernetes dashboard and used it to mine crypto currency.
 https://www.cnbc.com/2018/02/21/hackers-hijack-teslas-cloud-system-to-mine-cryptocurrency-redlock.html
 
 Accessing the k8s dashboard:
@@ -2246,7 +2242,7 @@ Note by default the view clusterrole exist in k8s kubeadm setup
 
 Create a token or get the token from a secret for the sa and use this to access the k8s dashboard.
 k create token -n kubernetes-dashboard readonly-user
-This will create a token for you copy it and paste on the k8s dashboard GUI.
+This will create a token for you cto opy it and paste on the k8s dashboard GUI.
 
 Alternatively run
 kubectl -n kubernetes-dashboard get secret readonly-user -o go-template="{{.data.token | base64decode}}"
@@ -2259,6 +2255,8 @@ The readonly-user service account has too few privileges. Now let's create a das
 Also, create a new secret called dashboard-admin-secret in the same namespace using the given YAML file /root/dashboard-admin-secret.yaml. It will create token credentials for the service account.
 
 Use admin ClusterRole with RoleBinding so that it gives full control over every resource in the role binding's namespace, including the namespace itself.
+important: when you bind a clusterrole with a rolebinding, the will give the sa or user its bind to access to all resources in the sa/user namespace only.
+To allow the sa/user access to list namespaces accross the cluster, you can bind the sa/user using clusterrolebinding to a list-namespace clusterrole.
 
 Also assign list-namespace ClusterRole to only see namespaces.
 
@@ -2356,7 +2354,7 @@ Cluster Maintenance:
 
 	 Important:
 	 when you try to drain a node that has a pod running on it that is not part of a replicaset or not controlled by a replication controller, youll have error till you use --force which is force:
-	 kubectl drain node01 --ignore-daemonsets
+	 kubectl drain node01 --ignore-daemonsets --force
 
 	 ERROR:
 
@@ -3118,7 +3116,8 @@ From my laptop, i want to run a docker command to target a specific host,
 the way things are, the docker daemon is not configured to list from outside host, it only listens to the unix socket /var/run/docker.sock on it host.
 However, we can make the docker daemon listen to a tcp socket on the docker host by running or passing the host option while starting the docker service.
 
-dockerd --debug --host=tcp://<ip>:2375
+sudo dockerd --debug --host=tcp://<ip>:2375
+sudo dockerd --debug --host=tcp://172.17.0.1:2375
 where the ip is the interface of the docker host, and 2375 is the standard port for docker.
 
 With the above settings, you'll be able to access the docker daemon from outside the host and get it to listen and run containers from outside of the host.
@@ -3126,7 +3125,18 @@ How can i from the other host target the docker daemon on the other host and run
 
 steps:
 1. export DOCKER_HOST="tcp://<ip>:2375"
+   export DOCKER_HOST=tcp://172.17.0.1:2375 --> Internally, since the docker0 interface ip 172.17.0.1 can only allow connection to the docker host within this ip range.
 docker ps
+Note: On the docker host, you can allow connection from anywhere by running:
+sudo dockerd --debug --host=tcp://0.0.0.0:2375
+then from the client server run export DOCKER_HOST="tcp://<pubip-dockerhost>:2375"
+docker ps -a --> youll access the docker host..
+Important: make sure port 2375 is open in the firewall security group of the docker host.
+
+Reference for debug and docker installtion, error i encountered while doing the demo:
+https://chat.openai.com/c/83e23838-b73d-4b84-a4c9-cd900d3e291c
+for internal use only..
+
 viola we are good, now you can run container on the host. Be sure this is what you want b/c anyone on the internet can target your docker host and run containers on the host.
 By default the docker api serves unencrypted traffic..
 
@@ -3267,9 +3277,13 @@ docker --tls ps
 
 Securing Control Plane Communications with Ciphers
 
-As we have already covered in previous lectures, communication between clients and API server, and also between the Kubernetes components is by way of Mutual TLS (mTLS). TLS works by use of Public Key Encryption, and the encryption is performed by cryptographic mathematical algorithms known as ciphers. Mathematicians discover new ciphers from time to time that are more secure than their predecessors.
+As we have already covered in previous lectures, communication between clients and API server, and also between the Kubernetes components
+is by way of Mutual TLS (mTLS). TLS works by use of Public Key Encryption, and the encryption is performed by
+cryptographic mathematical algorithms known as ciphers. Mathematicians discover new ciphers from time to time that are more secure than their predecessors.
 
-Each time a new cipher is discovered, it has to work its way into general usage, that is, that the software libraries that implement encryption need to be updated with the new cipher, whilst remaining compatible with the existing well-known ciphers. These updates have to find their way into all software that makes use of HTTPS (TLS) protocols including, but not limited to
+Each time a new cipher is discovered, it has to work its way into general usage, that is, that the software libraries that implement encryption need to be updated
+with the new cipher, whilst remaining compatible with the existing well-known ciphers. These updates have to find their way into all software that makes use
+of HTTPS (TLS) protocols including, but not limited to
 
     Browsers
     Web clients (e.g. curl, wget)
@@ -3362,7 +3376,7 @@ who --> users logged in the system.
 last --> list the last time users where logged in to the system
 
 Access control files:
-The access control files are all store in the /etc directory.
+The access control files are all stored in the /etc directory.
 1. /etc/shadow --> holds the password files for the users
 2. /etc/passwd --> holds the user names,uid,gid and their shell
 3. /etc/group  --> holds the group details of the users.
@@ -3392,8 +3406,42 @@ ssh -i user@hostname or ip
 For secure access,
 1. Generate a keypair using the ssh-keygen -t rsa command
 2. run the ssh-copy-id user@hostname or ip  --> This will prompt for password, enter it and the public key will be copied to the server at
-~/.ssh/authrorizedk_eys dir
+
+error:
+ssh-copy-id id_rsa.pub jim@node01
+/usr/bin/ssh-copy-id: ERROR: Too many arguments.  Expecting a target hostname, got: 'id_rsa.pub' 'jim@node01'
+
+Usage: /usr/bin/ssh-copy-id [-h|-?|-f|-n] [-i [identity_file]] [-p port] [[-o <ssh -o options>] ...] [user@]hostname
+        -f: force mode -- copy keys without trying to check if they are already installed
+        -n: dry run    -- no keys are actually copied
+        -h|-?: print this help
+
+		encountered this error while copying the ssh key.
+		solved by add the -i option to it.
+ssh-keygen -t rsa --> generates the keys.
+ssh-copy-id -i id_rsa.pub jim@node01 --> copys it to jim user.
+
+Important:
+
+
+controlplane ~/.ssh ➜  ssh-copy-id -i id_rsa.pub jim@node01
+/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "id_rsa.pub"
+/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
+/usr/bin/ssh-copy-id: INFO: 1 key(s) remain to be installed -- if you are prompted now it is to install the new keys
+jim@node01's password:
+sh: 1: cannot create .ssh/authorized_keys: Permission denied
+
+Make directory .ssh on the target machine in its home and set the ownership to that user.
+This will solve the issue..
+
+ssh jim@node01 logs you in without password..
+~/.ssh/authrorized_keys dir
 note ssh-copy-id is a command that exists by default.
+
+To exit from nano.. ctr + X and ctrl + Y
+commands:
+cat -n /etc/ssh/sshd_config | grep -i root
+
 
 3. Once successfully copied Harden ssh service.
 1. Disable ssh root account, this ensures no one is able to login with root act but only with their act. vi /etc/ssh/sshd_config
@@ -3401,7 +3449,7 @@ set the PermitRootLogin no
 set PasswordAuthentication no --> This ensures the access to the server is only via cryptographic ssh keys.
 sudo systemctl restart sshd
 
-Refer to the cis benchmark guide of section 5.2 for me info..
+Refer to the cis benchmark guide of section 5.2 for more info..
 
 
 Privilege Escalation in Linux
@@ -3543,10 +3591,11 @@ list installed packages on ubuntu system..
  systemctl stop nginx
  systemctl disable nginx
  systemctl status nginx
- rm  /lib/systemd/system/nginx.service
+ rm  /lib/systemd/system/nginx.service --> This means removing the nginx service unit.
  ---
  Blacklist a kernel module eg evbug
  vi /etc/modprobe.d/blacklist.conf
+ uncomment module you want to blacklist to balcklist it..
 
  Types of kernel modules that are blacklisted and those not blacklisted:
  cat /etc/modprobe.d/blacklist.conf
@@ -3617,6 +3666,8 @@ controlplane ~ ✖ netstat -natp  | grep 9090
 tcp        0      0 0.0.0.0:9090            0.0.0.0:*               LISTEN      27937/apache2
 
 controlplane ~ ➜  systemctl stop apache2
+
+netstat -apt | grep -w 9090
 
 
 Minimize IAM roles
@@ -3717,7 +3768,7 @@ netstat -natp | grep -w LISTEN
 
 Linux Syscalls
 This will give us an insight to what happens when an application runs or when a process is started in linux.
-The linux kernel: This the core of the os, i.e the major component of the os.
+The linux kernel: This is the core of the os, i.e the major component of the os.
 The kernel interfaces between the hardware and the software in an operating system.
 The kernel is indeed the core of an operating system (OS), and it serves as an interface between the hardware and the software. It manages hardware resources,
 such as memory, CPU, and devices, and provides essential services to the software applications running on the system. The kernel plays a crucial role in managing
@@ -3772,6 +3823,9 @@ These calls allow programs to interact with the underlying hardware and other pr
 Tracing syscalls used by a process
 ---------------------------------
 strace: This is a command in linux used to trace system calls used by an application and signals written by the application.
+sudo apt update
+sudo apt install strace
+
 bash
 which strace
 To check the system calls that was made to the linux kernel when we or an application executes a command in the /tmp file system such as touch /tmp/error.log
@@ -3801,11 +3855,11 @@ It is commonly used for observability, security, and performance analysis purpos
 By using Tracee, you can monitor and analyze the system calls made by processes on your Linux system at runtime, which can be valuable for security monitoring,
 debugging, and understanding how applications interact with the kernel.
 eBPF runs in the kernels space without interfering with the kernels code or loading any kernel modules.
-Tracee can be install and configured in the system, a better alternate is to run tracee as a docker container..
+Tracee can be install and configured in the system, a better alternative is to run tracee as a docker container..
 
 Summarily:
 
-Tracee uses an eBPF framework for tracing syscalls When ran as a container it boots the eBPF program and stores it at /tmp/tracee directory.
+Tracee uses an eBPF framework for tracing syscalls When ran as a container it boots the eBPF program and stores it at /tmp/tracee directory trace home directory.
 We can bind mounth this directory from the host to the container.
 
 ChatGPT:
@@ -4009,7 +4063,7 @@ We will see that when a pod is created with this custom.json Seccomp profile pas
 
 why??
 Because our applications need to access the root filesystem and write data to the / file system..
-Without having access to this directory to write data and access data, the pod when created will remaing in container creating..
+Without having access to this directory to write data and access data, the pod when created will remain in container creating..
 Important: add the mkdir syscall back to the custom.json file and see the pod created and running.
 
 This now brings us to the question of how can we allow applications access a specific file/directory, data they require to write data?
@@ -4026,7 +4080,8 @@ Security Option (--security-opt seccomp=unconfined): This setting disables the d
  but it also increases the security risk.
 
 Summarily:
-dissabling seccomp does not mean that all syscalls can run b/c docker has a built in default seccomp profile in all containers created that restricts certain syscall as stated above.
+dissabling seccomp does not mean that all syscalls can run b/c docker has a built in default seccomp profile in all containers created that restricts certain syscall
+as stated above.
 
 
 Implement Seccomp in Kubernetes:
