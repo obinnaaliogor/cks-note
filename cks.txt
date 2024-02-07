@@ -4198,6 +4198,157 @@ spec:
 IQ
 kubectl logs -f `kubectl get pods -l=io.kompose.service=tracee -o custom-columns=":metadata.name" --no-headers`
 
+Deploying tracee in k8s:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    io.kompose.service: tracee
+  name: tracee
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: tracee
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        io.kompose.service: tracee
+    spec:
+      containers:
+        - args:
+            - --trace
+            - container=new
+          image: aquasec/tracee:0.4.0
+          name: tracee
+          resources: {}
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - mountPath: /lib/modules/
+              name: tracee-claim0
+              readOnly: true
+            - mountPath: /usr/src
+              name: tracee-claim1
+              readOnly: true
+            - mountPath: /tmp/tracee
+              name: tracee-claim2
+      restartPolicy: Always
+      volumes:
+        - name: tracee-claim0
+          hostPath:
+            path: /lib/modules/
+            type: Directory
+        - name: tracee-claim2
+          hostPath:
+            path: /tmp/tracee
+            type: Directory
+        - name: tracee-claim1
+          hostPath:
+            path: /usr/src
+            type: Directory
+
+-----
+profiles:
+root@controlplane ~ ➜  cat relaxed-profile.json
+{
+    "defaultAction": "SCMP_ACT_ALLOW",
+    "architectures": [
+        "SCMP_ARCH_X86_64",
+        "SCMP_ARCH_X86",
+        "SCMP_ARCH_X32"
+    ],
+    "syscalls": [
+        {
+            "names": [
+                "socket",
+                "bind",
+                "listen",
+                "accept",
+                "accept4",
+                "connect",
+                "shutdown",
+                "setsockopt",
+                "getsockopt"
+            ],
+            "action": "SCMP_ACT_ERRNO"
+        }
+    ]
+}
+---
+ cat custom-profile.json
+{
+    "defaultAction": "SCMP_ACT_ERRNO",
+    "architectures": [
+        "SCMP_ARCH_X86_64",
+        "SCMP_ARCH_X86",
+        "SCMP_ARCH_X32"
+    ],
+    "syscalls": [
+        {
+            "names": [
+                "accept4",
+                "epoll_wait",
+                "pselect6",
+                "futex",
+                "madvise",
+                "epoll_ctl",
+                "getsockname",
+                "setsockopt",
+                "vfork",
+                "mmap",
+                "read",
+                "write",
+                "close",
+                "arch_prctl",
+                "sched_getaffinity",
+                "munmap",
+                "brk",
+                "rt_sigaction",
+                "rt_sigprocmask",
+                "sigaltstack",
+                "gettid",
+                "clone",
+                "bind",
+                "socket",
+                "openat",
+                "readlinkat",
+                "exit_group",
+                "epoll_create1",
+                "listen",
+                "rt_sigreturn",
+                "sched_yield",
+                "clock_gettime",
+                "connect",
+                "dup2",
+                "epoll_pwait",
+                "execve",
+                "exit",
+                "fcntl",
+                "getpid",
+                "getuid",
+                "ioctl",
+                "mprotect",
+                "nanosleep",
+                "open",
+                "poll",
+                "recvfrom",
+                "sendto",
+                "set_tid_address",
+                "setitimer",
+                "writev"
+            ],
+            "action": "SCMP_ACT_ALLOW"
+        }
+    ]
+}
+---
+ ls /var/lib/kubelet/seccomp/ --> default dir for seccomp profiles.
+profiles
+
+
 
 AppArmor:
 Reference: https://kubernetes.io/docs/tutorials/security/apparmor/
@@ -4242,6 +4393,9 @@ Note: AppArmor is currently in beta, so options are specified as annotations.
 Once support graduates to general availability, the annotations will be replaced with first-class fields.
 AppArmor profiles are specified per-container. To specify the AppArmor profile to run a Pod container with, add an annotation to the Pod's metadata:
 container.apparmor.security.beta.kubernetes.io/<container_name>: <profile_ref>
+
+Reference:
+  https://kubernetes.io/docs/tutorials/security/apparmor/#securing-a-pod
 
 Where <container_name> is the name of the container to apply the profile to, and <profile_ref> specifies the profile to apply. The profile_ref can be one of:
     runtime/default to apply the runtime's default profile
@@ -4299,11 +4453,17 @@ Important:
 To load a profile run:
 apparmor_parser /etc/apparmor.d/<profile>
 NB: if you got no output it means the profile was loaded successfully..
+By default when apparmor is loaded, its defaults to enforce mode.
+sudo apparmor_parser -r -W /etc/apparmor.d/usr.sbin.nginx
+You can also load aa with the above command.
 
 To disable the apparmor profile run:
-apparmor_paser -R /etc/apparmor.d/<profile-name>
+apparmor_parser -R /etc/apparmor.d/<profile-name>
 then create a symlink
-ln -s apparmor_paser /etc/apparmor.d/<profile> apparmor_paser /etc/apparmor.d/disable/
+ln -s apparmor_parser /etc/apparmor.d/<profile> apparmor_pasrer /etc/apparmor.d/disable/
+
+Reference:
+  https://gitlab.com/apparmor/apparmor/-/wikis/Policy_Layout
 
 
 AppArmor in Kubernetes:
@@ -4337,7 +4497,7 @@ getpcaps <pid>  --> This will list the capabilities of the ssh process
 
 Minimize Microservice Vulnerabilities
 Security Contexts:
-You add securityConntext for pods and containers to run with the basic priviledges they require.
+You add securityConntext for pods and containers to run with the basic privileges they require.
 You can also drop and add system capabilities.
 check the k8s docs, these things falls under minimizing Microservice vulnerabilities.
 Reference: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
@@ -4517,7 +4677,7 @@ PSP is deployed as admission controller and to enable PSA we add it as an option
 
 ex:
   1. k exec -n kube-system kube-apiserver-cluster1-controlplane -- kube-apiserver -h | grep enable-admission-plugins
-  look for PodSecurityPolicy admission controller. and enable it buy updated the kube-apiserver.yaml file
+  look for PodSecurityPolicy admission controller. and enable it buy updating the kube-apiserver.yaml file
   --enable-admission-plugins=PodSecurityPolicy
   REF: https://kubernetes.io/blog/2019/03/21/a-guide-to-kubernetes-admission-controllers/
 
@@ -4561,7 +4721,8 @@ spec:
         max: 200
   readOnlyRootFilesystem: false
   allowPrivilegeEscalation: false
-Pod security policy can also be used to not only restrict the creation of pods with certain priviledges can also mutate the creation of object by adding/dropping capabilities.
+Pod security policy can also be used to not only restrict the creation of pods with certain privileges, it can also mutate the creation of object
+by adding/dropping capabilities.
 
 4. Create a service account or use existing serviceaccount.
 4. create a clusterrole, this will have verbs as "use" and resourceNames is the psp we created.
@@ -4626,7 +4787,7 @@ This allows for easy implimentation of podsecurity in our clusters and anything 
 podsecurity admission controller is enabled by default.
 run;
   1. k exec -n kube-system kube-apiserver-cluster1-controlplane -- kube-apiserver -h | grep enable-admission-plugins
-  This output will show you those enabled by default and a combination of those enabled and not enabled by default.
+  This output will show you those admission plugins enabled by default and a combination of those enabled and not enabled by default.
   enabled by default:
     --enable-admission-plugins strings       admission plugins that should be enabled in addition to default enabled ones (NamespaceLifecycle,
 	LimitRanger, ServiceAccount, TaintNodesByCondition, PodSecurity, Priority, DefaultTolerationSeconds, DefaultStorageClass, StorageObjectInUseProtection, PersistentVolumeClaimResize, RuntimeClass, CertificateApproval,
@@ -4831,6 +4992,36 @@ Also, A namespace can have labels for all three modes, each specifying a differe
 
 Finally, Be cautious with changing labels, as escalating policy levels can lead to existing Pods being out of compliance.
 
+Important:
+
+  In Kubernetes Pod Security Admission (PSA), when using the three modes (enforce, audit, and warn) within a namespace,
+   the order in which these modes are considered does not follow a linear "execution order" like steps in a process.
+  Instead, each mode serves a distinct purpose and operates independently of the others. However, from a practical standpoint on how they affect the deployment
+  lifecycle and the feedback loop to developers and administrators, one might consider their logical sequence in terms of workflow impact:
+
+    Warn: This mode is the first line of feedback when deploying a Pod. It allows the cluster to accept the Pod but returns a warning message if the Pod
+	does not comply with the specified security policy. This immediate feedback is valuable for developers as it does not block Pod deployment but informs them
+	of non-compliance issues that need attention.
+
+    Audit: While audit does not directly influence the deployment process like warn, it serves as a critical tool for administrators to monitor and record policy violations. The audit logs are essential for understanding the security posture and compliance of workloads running in the namespace. This mode helps in identifying existing Pods that are not compliant with the desired security policies without affecting their operation.
+
+    Enforce: This mode has the most significant impact on the deployment lifecycle. If a Pod does not meet the policy requirements, it is denied creation
+	or termination within the namespace. This is the final enforcement step, ensuring that only Pods that comply with the security policy are allowed to run.
+	It is typically used after validating the implications through warn and audit modes.
+
+In practice, these modes allow for a phased approach to policy enforcement:
+
+    Development and Testing: Initially, warn and audit modes can be used to gather feedback and understand the implications of enforcing a new policy,
+	 without impacting existing workloads.
+
+    Policy Enforcement: Once the policy is tested and the necessary adjustments are made to ensure compliance,
+	enforce mode can be applied to actively protect the cluster by preventing non-compliant Pods from running.
+
+This phased approach allows teams to adjust their workloads to meet security standards gradually, reducing the risk of disruption.
+
+
+It also emphasizes the importance of planning and communication when escalating policy levels to avoid unexpected deployment issues.
+
 More about configuring the built-in admission controller can be found here.
 https://kubernetes.io/docs/tasks/configure-pod-container/enforce-standards-admission-controller/#configure-the-admission-controller
 
@@ -4956,6 +5147,93 @@ Inspect the manifest file and select the correct statement on enforced policies 
 Reference:
 https://kubernetes.io/docs/tasks/configure-pod-container/enforce-standards-admission-controller/#configure-the-admission-controller
 
+MORE ON PSS:
+----------------------------------------------------------------
+controlplane ~ ➜  k describe ns beta
+Name:         beta
+Labels:       kubernetes.io/metadata.name=beta
+              pod-security.kubernetes.io/enforce=baseline
+              pod-security.kubernetes.io/warn=restricted
+Annotations:  <none>
+Status:       Active
+
+No resource quota.
+
+No LimitRange resource.
+
+controlplane ~ ➜  cat multi-psa.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: multi-psa
+  namespace: beta
+spec:
+  containers:
+  - name: multi-psa
+    image: nginx
+    securityContext:
+      runAsUser: 0
+
+controlplane ~ ➜  k create -f multi-psa.yaml
+Warning: would violate PodSecurity "restricted:latest": allowPrivilegeEscalation != false (container "multi-psa" must set securityContext.allowPrivilegeEscalation=false),
+unrestricted capabilities (container "multi-psa" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "multi-psa"
+must set securityContext.runAsNonRoot=true),
+runAsUser=0 (container "multi-psa" must not set runAsUser=0), seccompProfile (pod or container "multi-psa" must set securityContext.seccompProfile.type to
+"RuntimeDefault" or "Localhost")
+pod/multi-psa created
+
+Important:
+From the above pod message,
+While applying the manifest multi-psa.yaml in the previous question, you would have seen a warning message as follows:
+
+Warning: would violate PodSecurity "restricted:latest": allowPrivilegeEscalation != false (container "multi-psa" must set securityContext.allowPrivilegeEscalation=false),
+unrestricted capabilities (container "multi-psa" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "multi-psa" must set
+securityContext.runAsNonRoot=true),
+runAsUser=0 (container "multi-psa" must not set runAsUser=0), seccompProfile (pod or container "multi-psa" must set securityContext.seccompProfile.type to
+"RuntimeDefault" or "Localhost")
+
+Pod will be created as it does not violate the baseline security standard but it does violate the restricted standard.
+Also, it will be created despite violating the restricted standard because the restricted standard is in warn mode.
+In this mode, although the pod does not adhere to the restricted standard, it is allowed to be created, and a warning message is issued during the pod creation process.
+
+Important:
+For pss you can configure a resource on how you want your enforcement and indicate the target namespace without just labeling the namespace with mode and security standard.
+This is done by creating AdmissionConfiguration resource, check https://kubernetes.io/docs/tasks/configure-pod-container/enforce-standards-admission-controller/
+ex:
+apiVersion: apiserver.config.k8s.io/v1
+kind: AdmissionConfiguration
+plugins:
+- name: PodSecurity
+  configuration:
+    apiVersion: pod-security.admission.config.k8s.io/v1 # see compatibility note
+    kind: PodSecurityConfiguration
+    # Defaults applied when a mode label is not set.
+    #
+    # Level label values must be one of:
+    # - "privileged" (default)
+    # - "baseline"
+    # - "restricted"
+    #
+    # Version label values must be one of:
+    # - "latest" (default)
+    # - specific version like "v1.29"
+    defaults:
+      enforce: "privileged"
+      enforce-version: "latest"
+      audit: "privileged"
+      audit-version: "latest"
+      warn: "privileged"
+      warn-version: "latest"
+    exemptions:
+      # Array of authenticated usernames to exempt.
+      usernames: []
+      # Array of runtime class names to exempt.
+      runtimeClasses: []
+      # Array of namespaces to exempt.
+      namespaces: []
+
+Note: If you want to exempt any namespace from the policy simply add it in the exemptions.namespaces[]
+Then the policy will not affect pods in that namespace..
 
 
 Open Policy Agent (OPA)
@@ -5037,6 +5315,69 @@ View existing policies, view the v1 api
 curl http://localhost:8181/v1/policies
 
 
+---------------------------------------------------------------------------------
+
+Important:
+
+The command you provided is for interacting with the Open Policy Agent (OPA), a general-purpose policy engine that enables unified,
+context-aware policy enforcement across the entire stack. OPA is commonly used for use cases such as authorization, security, compliance,
+and other policy-related decisions in cloud-native environments,
+microservices, CI/CD pipelines, API gateways, and more.
+
+The `example.rego` file is a policy written in Rego, OPA's high-level declarative language. The policy defines the rules for access control or authorization.
+Let's break down the content of `example.rego` first and then the `curl` command used to load this policy into OPA.
+
+### `example.rego` Explained
+
+```rego
+package httpapi.authz
+
+# HTTP API Request
+import input
+
+default allow = false
+
+allow {
+    input.path == "home"
+    input.user == "john"
+}
+```
+
+- `package httpapi.authz`: This line declares the package name for the policy.
+All Rego policies are organized into packages, which are namespaces for the rules defined within.
+
+- `import input`: This imports the `input` document that OPA uses to make decisions.
+The `input` document typically contains the data provided to OPA at query time, which OPA uses to evaluate its policies.
+
+- `default allow = false`: Sets the default decision for the `allow` rule to `false`.
+This means that if none of the conditions in the `allow` rules match, the policy will deny access by default.
+
+- `allow { ... }`: Defines a rule named `allow`. If the conditions inside the curly braces are true, then this rule evaluates to `true`.
+In this case, access is allowed if the path of the request is `"home"` and the user making the request is `"john"`.
+
+### Loading the Policy with `curl`
+
+```sh
+curl -X PUT --data-binary @example.rego http://localhost:8181/v1/policies/example1
+```
+
+- `curl`: A command-line tool for making HTTP requests.
+
+- `-X PUT`: Specifies the HTTP method to use, in this case, PUT. This method is used to update or create a resource at the specified URL.
+
+- `--data-binary @example.rego`: Sends the contents of the `example.rego` file as the request body.
+The `@` symbol is used to denote that the data should be read from a file. `--data-binary` ensures that the data is sent without modifications,
+which is important for binary data and for textual data that must be preserved exactly as is.
+
+- `http://localhost:8181/v1/policies/example1`: The URL where the policy is being sent.
+ This URL indicates that the policy is being loaded into OPA running locally on port `8181`.
+ The path `/v1/policies/example1` specifies that the policy should be stored under the name `example1` within OPA.
+
+In summary, this command sends the policy defined in `example.rego` to OPA, where it is stored under the name `example1`.
+The policy specifies that access is allowed only if the request path is `"home"` and the user is `"john"`.
+ This demonstrates how OPA can be used to enforce fine-grained, context-aware policies for applications and services.
+
+
 Modify your application code to now query the OPA api for authorization of the user john as follows:
 from flask import Flask, request
 import requests
@@ -5097,7 +5438,7 @@ IQ:
 As you can see in previous step, you were able to create resources without any enforcements and this might lead to several
 challenges and potential issues within a Kubernetes environment.
 
-With OPA Gatekeeper, you can best practices and organizational conventions for your resources in your kubernetes cluster.
+With OPA Gatekeeper, you can implement best practices and organizational conventions for your resources in your kubernetes cluster.
 
 For example, you can enforce policies like:
 
