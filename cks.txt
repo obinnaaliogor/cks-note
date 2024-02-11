@@ -5822,6 +5822,93 @@ required labels on resources. If you're targeting specific kinds of resources (l
 each of those in the `kinds` list rather than using a wildcard, depending on the capabilities of your Gatekeeper version.
 
 
+IQ:
+In previous step, you created a pod as per your team requirement but there might be instances where you might miss adding labels to the pods. In order to enforce these
+rules, we use OPA Gatekeeper.
+cat 1.yaml
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          properties:
+            labels:
+              type: array
+              items: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("you must provide labels: %v", [missing])
+        }
+----
+EXAM:
+
+For this step, create an ConstraintTemplate with name k8srequiredlabels with target admission.k8s.gatekeeper.sh and using the following rego.
+Deploy this:
+1. kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.15.0/deploy/gatekeeper.yaml
+
+2. controlplane ~ ✖ cat 1.yaml
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          properties:
+            labels:
+              type: array
+              items: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("you must provide labels: %v", [missing])
+        }
+
+3. controlplane ~ ➜  cat 2.yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: require-tech-label
+spec:
+  match:
+    namespaces: ["engineering"]
+  parameters:
+    labels: ["tech"]
+
+4. Validate:
+  controlplane ~ ➜  k run -n engineering testpod --image=nginx
+Error from server (Forbidden): admission webhook "validation.gatekeeper.sh" denied the request: [require-tech-label] you must provide labels: {"tech"}
+
+The error occured because we have deployed the gatekeeper, created a constraint template CRD with rego policy that will only allow pod to be created in a namespace if it
+has the right label as defined in the constraint resource..
+
 
 
 Manage Kubernetes secrets:
