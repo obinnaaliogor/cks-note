@@ -5910,6 +5910,103 @@ The error occured because we have deployed the gatekeeper, created a constraint 
 has the right label as defined in the constraint resource..
 
 
+IQ:
+Your team now wants to enforce a policy which enforces the number of replicas in deployments to be in range of 2 to 5 only.
+
+    Create an GateKeeper ConstraintTemplate k8sreplicalimits for this policy
+    Create a Constraint named replica-limits that uses created template CRD to enforce constraints on replicas, setting limits within the range of 2 to 5.
+
+
+Note: You can make use of k8sreplicalimits.yaml at /root location for creating ConstraintTemplate.
+We have also provided Gatekeeper documentation on top of the terminal.
+Please note that, we have removed the existing Gatekeeper CRDs.
+REFERENCE:
+  https://open-policy-agent.github.io/gatekeeper/website/docs/howto/
+--
+cat k8sreplicalimits.yaml
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sreplicalimits
+  annotations:
+    metadata.gatekeeper.sh/title: "Replica Limits"
+    metadata.gatekeeper.sh/version: 1.0.1
+    description: >-
+      Requires that objects with the field `spec.replicas` (Deployments,
+      ReplicaSets, etc.) specify a number of replicas within defined ranges.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sReplicaLimits
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          type: object
+          properties:
+            ranges:
+              type: array
+              description: Allowed ranges for numbers of replicas.  Values are inclusive.
+              items:
+                type: object
+                description: A range of allowed replicas.  Values are inclusive.
+                properties:
+                  min_replicas:
+                    description: The minimum number of replicas allowed, inclusive.
+                    type: integer
+                  max_replicas:
+                    description: The maximum number of replicas allowed, inclusive.
+                    type: integer
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sreplicalimits
+
+        object_name = input.review.object.metadata.name
+        object_kind = input.review.kind.kind
+
+        violation[{"msg": msg}] {
+            spec := input.review.object.spec
+            not input_replica_limit(spec)
+            msg := sprintf("The provided number of replicas is not allowed for %v: %v. Allowed ranges: %v", [object_kind, object_name, input.parameters])
+        }
+
+        input_replica_limit(spec) {
+            provided := input.review.object.spec.replicas
+            count(input.parameters.ranges) > 0
+            range := input.parameters.ranges[_]
+            value_within_range(range, provided)
+        }
+
+        value_within_range(range, value) {
+            range.min_replicas <= value
+            range.max_replicas >= value
+        }
+
+	---
+	controlplane ~ ➜  cat 3.yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sReplicaLimits
+metadata:
+  name: replica-limits
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployments", "Statefulsets"]
+  parameters:
+    ranges:
+    - min_replicas: 1
+      max_replicas: 5
+
+More on OPA:
+Reference:
+  https://open-policy-agent.github.io/gatekeeper/website/docs/violations
+===============
+There are several enforcements like these that you can create using OPA Gatekeeper and these can help you
+ to maintain best practices and organizational conventions for your resources in your kubernetes cluster.
+
+Navigate to Gatekeeper Library for a library of policies for OPA gatekeeper projects.
 
 Manage Kubernetes secrets:
 ---------------------------------------
@@ -5973,7 +6070,7 @@ kata Containers:
 another sandboxing tool for containers, it takes a diff approach when compared to gvisor.
 
 Runtime Classes:
-making use of gvisor and kata containers to deploy containerid applications.
+making use of gvisor and kata containers to deploy containerized applications.
 docker run -d nginx -->
 This will create an instance of an nginx application.
 what happens under the hood when the docker run -d nginx is ran?????????????
@@ -5985,9 +6082,9 @@ it downloads the image from the docker registry, the default been dockerhub, onc
 3. The containerd shim calls the runC to start the container.
 4. runC then interacts with the namespace and cgroups on the kernel to create or starts the container..
 
-runC is the default component in charge of creating the conatiners..
+runC is the default component in charge of creating the containers..
 NB:
-We can run any container using any of the runtime since theyre oci compliant
+We can run any container using any of the runtime since they're oci compliant
 gvisor runtime --> runsc
 kata runtime --> kata or kata-runtime
 ex:
@@ -6018,22 +6115,24 @@ verify after creating the pod to check if the nginx process is running on the ho
 pgrep -a nginx --> run this on the node.. you will notice the process cant be found on the host
 pgrep -a runsc
 
-
+-----------------------------------------------
+-----------------------------------------------
+-----------------------------------------------
 One way SSL vs Mutual SSL
 In a one way tls the client verifies that the server is who they say they are but the server does not verify the client authenticity.
 
-2. mutual tls --> in this case the clinet and server verifications process and established, the client verifies that the server is who they say they are and the server verifies
-that the client is who they say they are..
+2. mutual tls --> in this case the client and server verifications process and established, the client verifies that the server is who they say
+they are and the server verifies that the client is who they say they are..
 
 
 Implement pod to pod encryption by use of mTLS
 using mtls to secure pod-pod communication in the k8s cluster..
-Pod A and pod b
-Pod A want to securly communicated to podB via mtls...
-Pod A sends a requests to pod B and retrieves podB public certificates and key
+Pod A and pod B
+Pod A want to securely communicate to pod B via mtls...
+Pod A sends a requests to pod B and retrieves pod B public certificates and key
 Pod A verifies the public certificate it received from B with the CA as all CA public cert is in the clients browser..
 Pod A validates that pod B is who it says it is and encrypt its symmetric key with Pod B public key and sends it to pod B.
-pod B receives this key and cert from A decrypts it with his private key and verifys pod A key and cert with the CA once it validates it..
+pod B receives this key and cert from pod A decrypts it with his private key and verifys pod A key and cert with the CA once it validates it..
 All future comm can now be done using the symmetric keys.
 
 How can we manage this with interpods comm with 100s of pods comm with each other.
@@ -6084,7 +6183,7 @@ FROM debian:slim-buster
 Inveriablly, we will refer any image uppon which our image is built as the base image..
 
 Best Practices in building images:
-1. Do not build images that contains multiple applications such as database, webserver and other services all into one imgae.
+1. Do not build images that contains multiple applications such as database, webserver and other services all into one Image.
 2. Build images that are moduler and that solves one specific problem. images for db, images for webserver etc and each image having its own dependency without having to
 worry about the other application..
 These images can when deployed as containers can scale individually without having to worry about the other containers..
@@ -6144,10 +6243,14 @@ as a user with accesss to the kubernetes cluster, i can deploy any application a
 i can utilize any image in the application without restrictions, hackers can gain access to the cluster via the image and break out of the application to the host and
 damage the infrastructure or get secrets information from the host..
 It is good to have governance in place so that images are pulled from approved Registries only..
-implementation.
-1. use the admission controller by deploying a admission webhook server,secret, logic and service and deploy a validating webhook to make a call to the webhook server to validate
-if the deployment has the image from our required or specified registry.
-2. is to deploy OPA and create rego policy that will load to opa and let OPA handle the validation based on the statement in the policy.
+
+Implementation:
+----------------------
+1. use the admission controller by deploying a admission webhook server, secret, logic and service and deploy a validating webhook to make a call to the webhook server
+ to validate if the deployment has the image from our required or specified registry.
+
+2. Is to deploy OPA and create rego policy that will load to opa and let OPA handle the validation based on the statement in the policy.
+
 3. Configure a built in admission controller known as imagePolicyWebhook..
 for this we deploy a webhook server and configure the imagePolicyWebhook admission controller to talk to the webhook server using an admission configuration file..
 Reference:
@@ -6289,6 +6392,9 @@ admission-control-config-file: /etc/kubernetes/pki/admission_configuration.yaml
 
 Note: Once you update kube-apiserver yaml, please wait for a few minutes for the kube-apiserver to restart completely.
 
+ - --enable-admission-plugins=NodeRestriction,ImagePolicyWebhook
+    - --admission-control-config-file=/etc/kubernetes/pki/admission_configuration.yaml
+    Important: no volume mounts of the admission_configuration file.
 
 Important:
     When you define the /image_policy endpoint in your webhook server configuration (in image-policy-webhook.yaml), you are telling Kubernetes to send admission
@@ -6307,7 +6413,12 @@ Important:
     Kubernetes uses the admission review response to decide whether to admit or reject the pod creation/update request.
 	If the response is "allowed," the pod is admitted; if it's "denied," the pod is rejected.
 
+
+
 Use static analysis of user workloads (e.g.Kubernetes resources, Docker files)
+------------------------------------------------------
+
+
 With static analysis, we develop the definition files and review the files and enforce policys earlier in the development circle b4 it is pushed to the cluster..
 kubesec from controlplane https://kubesec.io is a tool that can help us with this..
 kubesec analysis resource definitions and score them and reports critical issues that where found in it..
@@ -6329,11 +6440,22 @@ curl -sSX POST --data-binary @test/asset/score-0-cap-sys-admin.yml https://v2.ku
 wget https://github.com/controlplaneio/kubesec/releases/download/v2.13.0/kubesec_linux_amd64.tar.gz
 tar -xvf  kubesec_linux_amd64.tar.gz
 mv kubesec /usr/bin/
+or
+ curl -L https://github.com/controlplaneio/kubesec/releases/download/v2.14.0/kubesec_linux_amd64.tar.gz -o kubesec_linux_amd64.tar.gz
+ mv kubesec /usr/bin
 
 /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/root/.kube/plugins/scan
 
+Commands:
+kubesec scan -h
+kubesec scan node.yaml --format json node.yaml  > /root/kubesec_report.json
+
 
 Scan images for known vulnerabilities (Trivy):
+------------------------------------------------------------
+Install trivy:
+  https://aquasecurity.github.io/trivy/v0.49/getting-started/installation/
+
 We scan images and make sure they do not have vulnerabilities that attackers can easily exploit..
 we have to understand what cve is, cve stands for common vulnerabilities and exposure..
 computer code is not perfect, when the bad guys finds these bugs they use it to abuse the system...
@@ -6361,12 +6483,11 @@ we have lots of processes,applications running as containers..
 we are told not to install unwanted packages..
 how can we determine the severity of packages to reduce the attack surface?
 we use cve scanners....the scanners scans the applications and tells you the vulnerabilities they have....
-say we have an nginx version 1.14 with known vulnerabilities, you can use cve scanners to get the level of vulnerabities and then solve the issue by upgrading to a higher version
-with less vulnerabilities..
+say we have an nginx version 1.14 with known vulnerabilities, you can use cve scanners to get the level of vulnerabities and then solve the issue by upgrading to a
+higher version with less vulnerabilities..
 the more packages you have in your system, the higher the vulnerabilities..
 
-trivy from aquasecurity is a vulnerabilities scanner..
-for containers, cicd piplines integration etc..
+trivy from aquasecurity is a vulnerabilities scanner for containers, cicd piplines integration etc..
 usage:
 install the package:
 run trivy image <imagename> to scan for vulnerabilities in the image....
@@ -6403,17 +6524,17 @@ BEST Practices
 
 
 Monitoring, Logging and Runtime Security
-
 Perform behavioral analytics of syscall process:
-We have dealth with various ways of reducing the attack surface of our infrastructure such as:
-	Minimizing Microservice vulnerabilities, cluster hardening, host hardning, sandboxing techniques, restricting access via ufw, mtls etc..
-	These are no gurantee that an attacker will not find some loopholes to exploit the resilent, secured infrastructure.
-	Lets an attacker is already inside our system, this doesnt mean that everything is totally gone bad, this cant be totally true.
-	The sooner we find out the better it is to evaluate the radius blast...
-	if a bridge occure it is important that we identify it as soon as possible.. by reacting quickly we can prevent the damage from affecting other system and thereby
-	reducing the blast reduce.. This will then allow us to patch the holes of the pods, containers that was used to get it..
 
-	How can we identify bridges that has already occured in our k8s clusters?
+We have dealth with various ways of reducing the attack surface of our infrastructure such as:
+	Minimizing Microservice vulnerabilities, cluster hardening, host hardening, sandboxing techniques, restricting access via ufw, mtls etc..
+	These are no gurantee that an attacker will not find some loopholes to exploit the resilent, secured infrastructure.
+	Lets say an attacker is already inside our system, this doesnt mean that everything is totally gone bad, this cant be totally true.
+	The sooner we find out the better it is to evaluate the radius blast.
+	if a breach occures it is important that we identify it as soon as possible by reacting quickly we can prevent the damage from affecting other system and thereby
+	reducing the radius blast.. This will then allow us to patch the holes of the pods, containers that was used to get in.
+
+	How can we identify breaches that has already occured in our k8s clusters?
 	We make use of tools as Falco.
 	Since our applications makes millions and 1000s of syscalls daily and we trace them using tools like tracee and strace cli, it is just meaningless to simply trace them.
 	what we should do is integrate tools that can analysis the syscalls and filter suspecious events...
@@ -6423,25 +6544,25 @@ We have dealth with various ways of reducing the attack surface of our infrastru
 	Attackers sometimes try to delete logs of how they got into the system. /var/logs/audit.log..
 	an admin has no reason deleting recent logs, this can be considered as anomalys..
 	This might be an early sign of intrusion..
-Be it an admin that did this, falco can monitor the events and sends alarms...
+Be it an admin that did this, falco can monitor the events and sends alarms.
 
 Falco Overview and Installation
-Deploying falco in our k8s cluster nad using it to detect threats..
+Deploying falco in our k8s cluster node and using it to detect threats.
 how does it work?
 Falco needs to see what system calls are coming in from the application space into the kernel space..
-This means it somehow has to insert itself inside the linux kernel space to sit in the middle and see what is coming in...
-Falco does this by making use of kernel module...(falco kernel module)
-By inserting additional code right inside the linux code..
-some managed k8s providers do not allow us do this... Falco can also acheive this by the use eBPF just like the tracee tool from aqau security..
-The syscalls are then analyzied by the libraries in the user space...
+This means it somehow has to insert itself inside the linux kernel space to sit in the middle and see what is coming in.
+Falco does this by making use of kernel module (falco kernel module).
+By inserting additional code right inside the linux code.
+some managed k8s providers do not allow us do this. Falco can also acheive this by the use eBPF just like the tracee tool from aqau security.
+The syscalls are then analyzied by the libraries in the user space.
 the events are then filtered by the falco policy engine using a predefined rules that will detect if the event is suspecious or not?
 Such events are the ouputed to stdnout, slack,email, syslogs etc..
 
 installation:
 Installing Falco as a service on the linux machine will also install falco kernel module..
 It is important to run falco as a service so it will be isolated from k8s services so if there is a compromise, falco will still be fxning and detect suspecious behavior.
-If you choose alternative, we can then run Falco as a daemonseet in the k8s cluster...
-This can be done using helm....
+If you choose alternative, we can then run Falco as a daemonseet in the k8s cluster.
+This can be done using helm.
 Reference: https://falco.org/docs/install-operate/installation/
            https://falco.org/docs/install-operate/deployment/
 
@@ -6463,7 +6584,7 @@ Falco implements certain rules by default.
 2. That a shell was opened in a container..
 These rules are defined in the rules.yaml files.. just like k8s objects.
 
-Falco rules file contains 3 type of elements... rule, list
+Falco rules file contains 3 type of elements. rule, list and macros
 1. rule:
 This defines all the conditions under which an alert should be triggered. it consists of 5 mandatory keys..
 - rule: "name of rule"
@@ -6497,8 +6618,8 @@ This defines all the conditions under which an alert should be triggered. it con
 
   https://github.com/falcosecurity/rules/blob/main/rules/falco_rules.yaml
 
-  NB: in the output we enter the user.name and container.name filter to output those information about whos event caused the action and on what object.
-  We set priority to our rule by setting the priority field..
+  NB: in the output we enter the user.name and container.name filter to output the information about whos event caused the action and on what object.
+  We set priority to our rule by setting the priority field.
   depending on the priority you can set them as:
 
   WARNING
@@ -6570,6 +6691,7 @@ The falco rule shown below, the condition; container.id != host and proc.name ba
   output: "Bash Shell Opened (user=%user.name container_id=%container.id container_name=%container.name command=%proc.cmdline)"
   priority: WARNING
 ---
+updated:
 - rule: Detect Shell inside a container
   desc: Alert if a shell such as bash is open inside a container
   condition: container.id != host and proc.name in (linux_shells)  #we update the rule to use the list we added "linux_shell"
@@ -6596,7 +6718,7 @@ now what will the rule look like? see below,
    items: ["bash", "ksh", "sh", "zsh", "csh"]
 
 as you can see from the above we have simplified it further replacing "container.id != host" with "container" which is the name we gave to the macro.
-The macro simply acts as a store for data or values for condition etc. You enter this in macro and simply supply the macro name in the falco rules you are writting.
+The macro simply acts as a store for data or values for condition etc. You enter this in macro and simply supply the macro name in the falco rules you are writing.
 By using macros and lists, you simplify the rule structure and make it easier to maintain and update.
 Using a Macro (container): Further simplification is achieved by defining a macro container for the condition container.id != host.
 This not only makes the rule more readable but also allows for easier updates. If the condition for identifying a container changes,
@@ -6607,13 +6729,18 @@ Falco Configuration Files:
 How we can apply the above rules we created.
 The default file directory for falco is located at
 /etc/falco/falco.yaml --> it is this configuration that falco uses when it boots up..
+here you will see:
+rules_files:
+ - under here all path to rules are entered in a list and its used from top to bottom by falco. the order matters b/c the preseding rules overrides
+ the earlier if theyre same.
+
 This can also be seen by inspecting the service unit file; systemctl status falco
 it can also be seen by running journalctl -fu falco --> look for /etc/falco/falco.yaml in the log output..
 You can also check the pid of falco from the output of systemctl status falco
 or vi or cat
 /usr/bin/systemd/system/falco.service
-This configuration file /etc/falco/falco.yaml consist of the rules that falco uses, various formatting options used for logs and output messages, the output channels to be configured and many config
-options in this file..
+This configuration file /etc/falco/falco.yaml consist of the rules that falco uses, various formatting options used for logs and output messages,
+the output channels to be configured and many config options in this file.
 
 Note: by default these are set in falco rules as,
 json_output = false
@@ -6630,9 +6757,11 @@ or
 kubectl rollout restart ds
 
 Important:
-Inside the Falco rules directory /etc/falco, you will find the rules files. To add your custom rules, you should use the directory /etc/falco/rules.d. This is the directory where custom rule files are typically placed.
-In k8s when you deploy falco using helm, its creates ds,svc,sidekick and sidekickui,cm. To use custom rule, create a custom rule using in the /etc/falco/falco_rules.local.yaml file and use it
-to create configmap in the same namespace that falco was deployed and restart the ds pod by running, kubectl rollout restart ds
+Inside the Falco rules directory /etc/falco, you will find the rules files. To add your custom rules, you should use the directory /etc/falco/rules.d.
+This is the directory where custom rule files are typically placed.
+In k8s when you deploy falco using helm, its creates ds,svc,sidekick and sidekickui,cm. To use custom rule, create a custom rule using
+in the /etc/falco/falco_rules.local.yaml file and use it to create configmap in the same namespace that falco was deployed and
+restart the ds pod by running, kubectl rollout restart ds
 
 This can be added in the falco.yaml file
 stdout_output:
@@ -6658,7 +6787,6 @@ kill -1 $(cat /var/run/falco.pid)
 or
 kubectl rollout restart ds --> WHEN DEPLOYED AS DAEMONSET
 
-  it will send logs to the above file..
 
 ---
 MY SAMPLE CUSTOM FALCO RULES:
@@ -6772,6 +6900,9 @@ https://falco.org/docs/rules/supported-fields/
 https://falco.org/docs/rules/default-macros/
 
 https://falco.org/docs/configuration/
+
+
+
 
 
 Mutable vs Immutable Infrastructure
@@ -6984,7 +7115,13 @@ doing the opposite of the above will break the immutability of the containers..
 
 Reference: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
 
+Important: we you modify httpd pods by seeting readOnlyRootFilesystem as true and it fails to run after you have mounted volumes to grant it access to the path it needs
+to write data, remove all the auto popluated part of the pods manifest when it was created and create the pods again it will work.
+
+
+
 Use Audit Logs to monitor access:
+---------------------------------
 We where able to see how falco was able to detect suspecious activities in the container such as accessing sensitive files, spawning of the shell etc..
 How do we audit and monitor what is happening in our kubernetes cluster?
 Auditing allows cluster administrators to answer the following questions:
@@ -6997,7 +7134,7 @@ Auditing allows cluster administrators to answer the following questions:
     to where was it going?
 	which namespace was it created in?
 	all these informations are called events in k8s.. auditing events will allow us detect suspecious behavior or anomalies in our kubernetes cluster.
-	Kubernetes provides auditing by default and this is handled by the kube-apiserver..
+	Kubernetes provides auditing by default and this is handled by the kube-apiserver.
 
 	Looking at the diff stages that a request has to go through in the k8s cluster.
 	admin--> authentication ---> authorization --> admission controller --> creation of resources
@@ -7187,5 +7324,3 @@ apiVersion: audit.k8s.io/v1
 kind: Policy
 rules:
 - level: Metadata
-
-
