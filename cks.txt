@@ -6394,7 +6394,28 @@ Note: Once you update kube-apiserver yaml, please wait for a few minutes for the
 
  - --enable-admission-plugins=NodeRestriction,ImagePolicyWebhook
     - --admission-control-config-file=/etc/kubernetes/pki/admission_configuration.yaml
-    Important: no volume mounts of the admission_configuration file.
+    Important: needs volume mounts of the admission_configuration file and the config file.
+    Note as shown below:
+
+    apiVersion: apiserver.config.k8s.io/v1
+kind: AdmissionConfiguration
+plugins:
+  - name: ImagePolicyWebhook
+    configuration:
+      imagePolicy:
+        kubeConfigFile: /etc/admission-controllers/admission-configuration.yaml
+        allowTTL: 50
+        denyTTL: 50
+        retryBackoff: 500
+        defaultAllow: false
+-----
+in the provided AdmissionConfiguration snippet for Kubernetes, the kubeConfigFile option specifies the path to a kubeconfig file within the container
+ that's running the admission controller. The path /etc/admission-controllers/admission-configuration.yaml refers to the location inside the container
+where the kubeconfig file is expected to be found. This file is used by the ImagePolicyWebhook plugin to communicate with the Kubernetes API server.
+
+The kubeconfig file contains the necessary configuration information for the client (in this case, the admission controller) to connect to the Kubernetes
+ API server, including details about the API server's address, credentials for authentication, and the certificate to establish a secure connection.
+ The path must be correct and accessible by the admission controller within its running environment (container) for it to function properly
 
 Important:
     When you define the /image_policy endpoint in your webhook server configuration (in image-policy-webhook.yaml), you are telling Kubernetes to send admission
