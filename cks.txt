@@ -6922,7 +6922,8 @@ https://falco.org/docs/rules/default-macros/
 
 https://falco.org/docs/configuration/
 
-
+Important:
+For IQ on falco, always for best practice create the rule in falco_rules.local.yaml  file or copy and past in that file and make changes..
 
 
 
@@ -7345,3 +7346,20 @@ apiVersion: audit.k8s.io/v1
 kind: Policy
 rules:
 - level: Metadata
+
+
+MOCK EXAM:
+IQ:
+Task
+
+A pod in the sahara namespace has generated alerts that a shell was opened inside the container.
+
+To recognize such alerts, set the priority to ALERT and change the format of the output so that it looks like the below:
+
+ALERT timestamp of the event without nanoseconds,User ID,the container id,the container image repository
+Make sure to update the rule in such a way that the changes will persists across Falco updates.
+
+You can refer the falco documentation Here
+Giving space in the output failed the task, always read and check carefully..
+
+CKS - Challenges:
