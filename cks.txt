@@ -7363,3 +7363,73 @@ You can refer the falco documentation Here
 Giving space in the output failed the task, always read and check carefully..
 
 CKS - Challenges:
+
+Installing kube-bench..
+
+ISSUE:
+
+root@controlplane /opt ➜  ./kube-bench --config-dir /opt/cfg --config /opt/cfg/config.yaml > /var/www/html/index.html
+-su: ./kube-bench: cannot execute binary file: Exec format error
+
+causes:
+
+The error message you're encountering, `-su: ./kube-bench: cannot execute binary file: Exec format error`, suggests that there's a
+mismatch between the architecture of the `kube-bench` binary you're trying to execute and your system's architecture.
+This can happen if, for example, you're trying to run a binary compiled for a different processor architecture (like trying
+to run an ARM binary on an x86 system, or vice versa).
+
+Here are a few steps you can take to troubleshoot and resolve this issue:
+
+1. **Check the Architecture of the Binary:**
+   You can use the `file` command to check the architecture of the `kube-bench` binary. Run this command in the directory where `kube-bench` is located:
+   ```
+   file kube-bench
+   ```
+   This will tell you for which architecture the binary was compiled.
+
+2. **Compare with Your System's Architecture:**
+   Next, you need to check your system's architecture to ensure compatibility. You can do this with the `uname -m` command:
+   ```
+   uname -m
+   ```
+   This command will output your system's architecture. The output should match the architecture for which the `kube-bench` binary was compiled.
+
+3. **Download the Correct Binary:**
+   If there's a mismatch, you'll need to download the version of `kube-bench` that matches your system's architecture.
+   Go to the official GitHub repository or the location where you originally downloaded `kube-bench`,
+   and look for a binary that matches your system's architecture (e.g., if you're on an x86_64 system, make sure to download the binary compiled for x86_64).
+
+4. **Set Execution Permissions:**
+   After downloading the correct binary, ensure it has execution permissions:
+   ```
+   chmod +x kube-bench
+   ```
+
+5. **Use Absolute Paths for Safety:**
+   Instead of using `./kube-bench`, you might want to navigate to the directory where `kube-bench`
+   is located and use its absolute path to run it, especially if you're redirecting output to a location like `/var/www/html/index.html`.
+   This helps avoid any confusion about which binary is being executed.
+
+6. **Consider Compatibility Issues:**
+   If you're running on a very unusual architecture or if there are other compatibility issues, you might need to build `kube-bench`
+   from source on your machine, ensuring it's compiled specifically for your environment. The GitHub repository for `kube-bench`
+    should have instructions on how to do this.
+
+If after ensuring you have the correct binary for your architecture you still face issues, it might be worth checking any dependency or library requirements for
+ `kube-bench`, or consider reaching out to the kube-bench community for support.
+
+
+MY TAKE:
+I ran uname -m
+checked https://github.com/aquasecurity/kube-bench/blob/main/docs/installation.md
+https://github.com/aquasecurity/kube-bench/releases/tag/v0.6.2
+downloaded the one with AMD64 as shown below
+curl -L https://github.com/aquasecurity/kube-bench/releases/download/v0.6.2/kube-bench_0.6.2_linux_amd64.tar.gz -o /opt/kube-bench_0.6.2_linux_amd64.tar.gz
+ kube-bench_0.6.2_linux_amd64.tar.gz  and it worked
+
+RUN kube-bench
+ ./kube-bench --config-dir `pwd`/cfg --config `pwd`/cfg/config.yaml
+------------
+ Run kube-bench and redirect result to a file.
+ mkdir -p /var/www/html
+ ./kube-bench --config-dir `pwd`/cfg --config `pwd`/cfg/config.yaml > /var/www/html/index.html
