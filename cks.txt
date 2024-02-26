@@ -6587,6 +6587,10 @@ This can be done using helm.
 Reference: https://falco.org/docs/install-operate/installation/
            https://falco.org/docs/install-operate/deployment/
 
+Simply run:
+FALCO_FRONTEND=noninteractive apt-get install -y falco
+
+
 Use Falco to Detect Threats:
 check if falco is running on the host..
 1. systemctl status falco
@@ -7433,3 +7437,16 @@ RUN kube-bench
  Run kube-bench and redirect result to a file.
  mkdir -p /var/www/html
  ./kube-bench --config-dir `pwd`/cfg --config `pwd`/cfg/config.yaml > /var/www/html/index.html
+
+
+KILLER Shell
+Rules
+
+You're only allowed to have one other browser tab open with:
+
+    https://kubernetes.io/docs
+    https://github.com/kubernetes
+    https://kubernetes.io/blog
+    https://github.com/aquasecurity/trivy
+    https://falco.org/docs
+    https://gitlab.com/apparmor/apparmor/-/wikis/Documentation
