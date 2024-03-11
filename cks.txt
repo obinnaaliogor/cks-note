@@ -4793,7 +4793,7 @@ run;
 	LimitRanger, ServiceAccount, TaintNodesByCondition, PodSecurity, Priority, DefaultTolerationSeconds, DefaultStorageClass, StorageObjectInUseProtection, PersistentVolumeClaimResize, RuntimeClass, CertificateApproval,
 	CertificateSigning, CertificateSubjectRestriction, DefaultIngressClass, MutatingAdmissionWebhook, ValidatingAdmissionWebhook, ResourceQuota).
 
-	When you look at the output of the command you will see a dot "." that ends the default enabled admission controllers and you dont need to enable them in the
+	When you look at the output of the command you will see a dot <.> that ends the default enabled admission controllers and you dont need to enable them in the
 	apiserver.yaml file.
 	You see the onces after the . is a combination of both enabled and non enabled.
 
@@ -6403,7 +6403,7 @@ plugins:
   - name: ImagePolicyWebhook
     configuration:
       imagePolicy:
-        kubeConfigFile: /etc/admission-controllers/admission-configuration.yaml
+        kubeConfigFile: /etc/admis
         allowTTL: 50
         denyTTL: 50
         retryBackoff: 500
@@ -7450,3 +7450,85 @@ You're only allowed to have one other browser tab open with:
     https://github.com/aquasecurity/trivy
     https://falco.org/docs
     https://gitlab.com/apparmor/apparmor/-/wikis/Documentation
+
+    -----
+    HINTS:
+    This is the default configuration, if we look into falco.yaml we can see:
+
+# /etc/falco/falco.yaml
+...
+
+# Where security notifications should go.
+
+# Multiple outputs can be enabled.
+syslog_output:
+
+  enabled: true
+--------
+    cat /var/log/syslog | grep falco
+    cat /var/log/syslog | grep falco | grep httpd | grep passwd
+    crictl ps -id <CONTAINER-ID>
+    crictl pods -id <PODS-ID>
+
+For all available fields we can check https://falco.org/docs/rules/supported-fields, which should be allowed to open during the exam.
+
+check shasum:
+
+echo "shasum binary number  <the binary>" | sha512sum --check
+once this gives ok, then it matches.
+
+echo "138gfhhd677997000 kube-apiserver" | sha512sum --check
+https://kubernetes.io/docs/tasks/tools/install-kubectl-macos/
+
+-----
+using the SA mounted on the pod to retreive the secret in a specific namespace. used the authorization Bearer token..
+https://kubernetes.io/docs/tasks/administer-cluster/access-cluster-api/
+
+HINT:
+When searching for secrets accessed by an sa.
+AMONGST YOUR GREP COMMAND grep for selflink which has path to all the secret.
+cat /var/logs/syslog | grep p.auth | jq| grep selflink|grep secrets
+
+note:
+openssl req -x509 -newkey rsa:2048 -nodes -keyout tls.key -subj "/CN=example.com" -days 10000 -out tls.crt -sha256
+
+
+sudo lsof -p 1234 > /candidate/KH77539/files.txt
+ls -l /proc/1234/exe
+sudo rm /path/to/binary
+
+IQ:
+For this Use context: kubectl config use-context workload-prod
+
+There are Pods in Namespace team-yellow. A security investigation noticed that some processes running in these Pods are using the Syscall kill, which is forbidden by a Team Yellow internal policy.
+
+Find the offending Pod(s) and remove these by reducing the replicas of the parent Deployment to 0.
+
+use crictl to get the pods id and container id.
+when you get the container id get the ARG that was executed in the container and run
+run
+crictl ps | ps -aux | grep <the ARG>
+do this for the entire containers and get a pid.. and use strace -p command to find out the process that ran the KILL
+
+information:
+https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/
+https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/
+---
+k config set-credentials 60099@internal.users --client-key=60099.key --client-certificate=60099.crt
+k config set-context 60099@internal.users --cluster=kubernetes --user=60099@internal.users
+k config get-contexts
+k config use-context 60099@internal.users
+k get ns # fails because no permissions, but shows the correct username returned
+
+Check LISTEN PORT AND PID.
+apt-get install net-utils
+netstat -tulpn | grep -w 1234
+ls -l /proc/pid/exe ---> gives the path to the binary
+kill the process and remove the binary.
+controlplane $ kill 140441
+controlplane $ rm /usr/bin/app1
+controlplane $ ls -l /proc/140441/exe
+ls: cannot access '/proc/140441/exe': No such file or directory
+controlplane $
+
+kubeadm upgrade apply 1.22.4 --etcd-upgrade=false
